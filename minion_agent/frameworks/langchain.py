@@ -1,97 +1,133 @@
-import importlib
-from typing import Any, Optional, List
+from collections.abc import Sequence
+from typing import TYPE_CHECKING, Any, cast
 
-from any_agent.config import AgentFramework, AgentConfig
-from any_agent.frameworks.any_agent import AnyAgent
-from any_agent.logging import logger
-from any_agent.tools.wrappers import import_and_wrap_tools
+from minion_agent.config import AgentConfig, AgentFramework, TracingConfig
+from minion_agent.logging import logger
+
+from .minion_agent import MinionAgent
 
 try:
+    from langchain_core.language_models import LanguageModelLike
+    from langchain_litellm import ChatLiteLLM
     from langgraph.prebuilt import create_react_agent
-    from langgraph.graph.graph import CompiledGraph
+    from langgraph_swarm import create_handoff_tool, create_swarm
+
+    DEFAULT_AGENT_TYPE = create_react_agent
+    DEFAULT_MODEL_TYPE = ChatLiteLLM
 
     langchain_available = True
 except ImportError:
     langchain_available = False
 
+if TYPE_CHECKING:
+    from langchain_core.language_models import LanguageModelLike
+    from langchain_core.messages.base import BaseMessage
+    from langgraph.graph.graph import CompiledGraph
 
-DEFAULT_MODEL_CLASS = "langchain_litellm.ChatLiteLLM"
 
-
-class LangchainAgent(AnyAgent):
+class LangchainAgent(MinionAgent):
     """LangChain agent implementation that handles both loading and running."""
 
     def __init__(
-        self, config: AgentConfig, managed_agents: Optional[list[AgentConfig]] = None
+        self,
+        config: AgentConfig,
+        managed_agents: Sequence[AgentConfig] | None = None,
+        tracing: TracingConfig | None = None,
     ):
-        if not langchain_available:
-            raise ImportError(
-                "You need to `pip install 'minion-agent-x[langchain]'` to use this agent"
-            )
-        self.managed_agents = managed_agents
-        self.config = config
-        self._agent = None
-        self._agent_loaded = False
-        self._tools = []
-        self._mcp_servers = None
+        super().__init__(config, managed_agents, tracing)
+        self._agent: CompiledGraph | None = None
+        self._tools: Sequence[Any] = []
 
-    def _get_model(self, agent_config: AgentConfig):
+    @property
+    def framework(self) -> AgentFramework:
+        return AgentFramework.LANGCHAIN
+
+    def _get_model(self, agent_config: AgentConfig) -> "LanguageModelLike":
         """Get the model configuration for a LangChain agent."""
-        if not agent_config.model_type:
-            agent_config.model_type = DEFAULT_MODEL_CLASS
-        module, class_name = agent_config.model_type.split(".")
-        model_type = getattr(importlib.import_module(module), class_name)
+        model_type = agent_config.model_type or DEFAULT_MODEL_TYPE
 
-        return model_type(model=agent_config.model_id, **agent_config.model_args or {})
+        return cast(
+            "LanguageModelLike",
+            model_type(
+                model=agent_config.model_id,
+                api_key=agent_config.api_key,
+                api_base=agent_config.api_base,
+                model_kwargs=agent_config.model_args or {},  # type: ignore[arg-type]
+            ),
+        )
 
     async def _load_agent(self) -> None:
         """Load the LangChain agent with the given configuration."""
+        if not langchain_available:
+            msg = "You need to `pip install 'minion-agent[langchain]'` to use this agent"
+            raise ImportError(msg)
 
-        if not self.config.tools:
-            self.config.tools = [
-                "any_agent.tools.search_web",
-                "any_agent.tools.visit_webpage",
-            ]
+        imported_tools, _ = await self._load_tools(self.config.tools)
 
         if self.managed_agents:
-            raise NotImplementedError("langchain managed agents are not supported yet")
+            swarm = []
+            managed_names = []
+            for n, managed_agent in enumerate(self.managed_agents):
+                managed_tools, _ = await self._load_tools(managed_agent.tools)
+                name = managed_agent.name
+                if not name or name == "minion_agent":
+                    logger.warning(
+                        "Overriding name for managed_agent. Can't use the default.",
+                    )
+                    name = f"managed_agent_{n}"
+                managed_names.append(name)
 
-        imported_tools, mcp_servers = await import_and_wrap_tools(
-            self.config.tools, agent_framework=AgentFramework.LANGCHAIN
-        )
-        self._mcp_servers = mcp_servers
+                agent_type = managed_agent.agent_type or DEFAULT_AGENT_TYPE
+                instance = agent_type(
+                    name=name,
+                    model=self._get_model(managed_agent),
+                    tools=[
+                        *managed_tools,
+                        create_handoff_tool(agent_name=self.config.name),
+                    ],
+                    prompt=managed_agent.instructions,
+                    **managed_agent.agent_args or {},
+                )
+                swarm.append(instance)
 
-        # Extract tools from MCP managers and add them to the imported_tools list
-        for mcp_server in mcp_servers:
-            imported_tools.extend(mcp_server.tools)
-
-        model = self._get_model(self.config)
-
-        self._agent: CompiledGraph = create_react_agent(
-            model=model,
-            tools=imported_tools,
-            prompt=self.config.instructions,
-            **self.config.agent_args or {},
-        )
-        # Langgraph doesn't let you easily access what tools are loaded from the CompiledGraph, so we'll store a list of them in this class
+            imported_tools = [
+                create_handoff_tool(agent_name=managed_name)
+                for managed_name in managed_names
+            ]
+            agent_type = self.config.agent_type or DEFAULT_AGENT_TYPE
+            self._main_agent_tools = imported_tools
+            main_agent = agent_type(
+                name=self.config.name,
+                model=self._get_model(self.config),
+                tools=imported_tools,
+                prompt=self.config.instructions,
+                **self.config.agent_args or {},
+            )
+            swarm.append(main_agent)
+            workflow = create_swarm(swarm, default_active_agent=self.config.name)
+            self._agent = workflow.compile()
+        else:
+            self._main_agent_tools = imported_tools
+            agent_type = self.config.agent_type or DEFAULT_AGENT_TYPE
+            self._agent = agent_type(
+                name=self.config.name,
+                model=self._get_model(self.config),
+                tools=imported_tools,
+                prompt=self.config.instructions,
+                **self.config.agent_args or {},
+            )
+        # Langgraph doesn't let you easily access what tools are loaded from the CompiledGraph,
+        # so we'll store a list of them in this class
         self._tools = imported_tools
 
-    async def run_async(self, prompt: str) -> Any:
-        """Run the LangChain agent with the given prompt."""
+    async def _run_async(self, prompt: str, **kwargs: Any) -> str:
+        if not self._agent:
+            error_message = "Agent not loaded. Call load_agent() first."
+            raise ValueError(error_message)
         inputs = {"messages": [("user", prompt)]}
-        message = None
-        async for s in self._agent.astream(inputs, stream_mode="values"):
-            message = s["messages"][-1]
-            if isinstance(message, tuple):
-                logger.debug(message)
-            else:
-                message.pretty_print()
-        return message
-
-    @property
-    def tools(self) -> List[str]:
-        """
-        Return the tools used by the agent.
-        This property is read-only and cannot be modified.
-        """
-        return self._tools
+        result = await self._agent.ainvoke(inputs, **kwargs)
+        if not result.get("messages"):
+            msg = "No messages returned from the agent."
+            raise ValueError(msg)
+        last_message: BaseMessage = result["messages"][-1]
+        return str(last_message.content)

@@ -1,88 +1,86 @@
-from typing import Optional, Any, List
+from collections.abc import Sequence
+from typing import TYPE_CHECKING
 from uuid import uuid4
 
-from minion_agent.config import AgentFramework, AgentConfig
-from minion_agent.frameworks.minion_agent import MinionAgent
-from minion_agent.instructions import get_instructions
-from minion_agent.logging import logger
-from minion_agent.tools.wrappers import import_and_wrap_tools
+from minion_agent.config import AgentConfig, AgentFramework, TracingConfig
+
+from .minion_agent import MinionAgent
 
 try:
-    from google.adk.agents import Agent
+    from google.adk.agents.llm_agent import LlmAgent
     from google.adk.models.lite_llm import LiteLlm
     from google.adk.runners import InMemoryRunner
     from google.adk.tools.agent_tool import AgentTool
     from google.genai import types
 
+    DEFAULT_MODEL_TYPE = LiteLlm
     adk_available = True
-except ImportError as e:
-    adk_available = None
+except ImportError:
+    adk_available = False
+
+if TYPE_CHECKING:
+    from google.adk.models.base_llm import BaseLlm
 
 
 class GoogleAgent(MinionAgent):
-    """Google agent implementation that handles both loading and running."""
+    """Google ADK agent implementation that handles both loading and running."""
 
     def __init__(
-        self, config: AgentConfig, managed_agents: Optional[list[AgentConfig]] = None
+        self,
+        config: AgentConfig,
+        managed_agents: Sequence[AgentConfig] | None = None,
+        tracing: TracingConfig | None = None,
     ):
-        if not adk_available:
-            raise ImportError(
-                "You need to `pip install 'minion-agent-x[google]'` to use this agent"
-            )
-        self.managed_agents = managed_agents
-        self.config = config
-        self._agent = None
-        self._agent_loaded = False
-        self._mcp_servers = None
-        self._managed_mcp_servers = None
+        super().__init__(config, managed_agents, tracing)
+        self._agent: LlmAgent | None = None
 
-    def _get_model(self, agent_config: AgentConfig):
+    @property
+    def framework(self) -> AgentFramework:
+        return AgentFramework.GOOGLE
+
+    def _get_model(self, agent_config: AgentConfig) -> "BaseLlm":
         """Get the model configuration for a Google agent."""
-        return LiteLlm(model=agent_config.model_id, **agent_config.model_args or {})
+        model_type = agent_config.model_type or DEFAULT_MODEL_TYPE
+        return model_type(
+            model=agent_config.model_id,
+            api_key=agent_config.api_key,
+            api_base=agent_config.api_base,
+            **agent_config.model_args or {},
+        )
 
     async def _load_agent(self) -> None:
         """Load the Google agent with the given configuration."""
-        if not self.managed_agents and not self.config.tools:
-            self.config.tools = [
-                "minion_agent.tools.search_web",
-                "minion_agent.tools.visit_webpage",
-            ]
-        tools, mcp_servers = await import_and_wrap_tools(
-            self.config.tools, agent_framework=AgentFramework.GOOGLE
-        )
-        # Add to agent so that it doesn't get garbage collected
-        self._mcp_servers = mcp_servers
-        mcp_tools = [tool for mcp_server in mcp_servers for tool in mcp_server.tools]
-        tools.extend(mcp_tools)
+        if not adk_available:
+            msg = "You need to `pip install 'minion-agent[google]'` to use this agent"
+            raise ImportError(msg)
+
+        tools, _ = await self._load_tools(self.config.tools)
 
         sub_agents_instanced = []
         if self.managed_agents:
             for managed_agent in self.managed_agents:
-                managed_tools, managed_mcp_servers = await import_and_wrap_tools(
-                    managed_agent.tools, agent_framework=AgentFramework.GOOGLE
-                )
-                # Add to agent so that it doesn't get garbage collected
-                self._managed_mcp_servers = managed_mcp_servers
-                managed_mcp_tools = [
-                    tool
-                    for mcp_server in managed_mcp_servers
-                    for tool in mcp_server.tools
-                ]
-                managed_tools.extend(managed_mcp_tools)
-                instance = Agent(
+                managed_tools, _ = await self._load_tools(managed_agent.tools)
+
+                agent_type = managed_agent.agent_type or LlmAgent
+
+                managed_agent_args = managed_agent.agent_args or {}
+                handoff = managed_agent_args.pop("handoff", None)
+                instance = agent_type(
                     name=managed_agent.name,
-                    instruction=get_instructions(managed_agent.instructions) or "",
+                    instruction=managed_agent.instructions or "",
                     model=self._get_model(managed_agent),
                     tools=managed_tools,
-                    **managed_agent.agent_args or {},
+                    **managed_agent_args or {},
                 )
 
-                if managed_agent.handoff:
+                if handoff:
                     sub_agents_instanced.append(instance)
                 else:
                     tools.append(AgentTool(instance))
+        agent_type = self.config.agent_type or LlmAgent
 
-        self._agent = Agent(
+        self._main_agent_tools = tools
+        self._agent = agent_type(
             name=self.config.name,
             instruction=self.config.instructions or "",
             model=self._get_model(self.config),
@@ -92,41 +90,37 @@ class GoogleAgent(MinionAgent):
             output_key="response",
         )
 
-    async def run_async(
-        self, prompt: str, user_id: str | None = None, session_id: str | None = None
-    ) -> Any:
-        """Run the Google agent with the given prompt."""
+    async def _run_async(  # type: ignore[no-untyped-def]
+        self,
+        prompt: str,
+        user_id: str | None = None,
+        session_id: str | None = None,
+        **kwargs,
+    ) -> str:
+        if not self._agent:
+            error_message = "Agent not loaded. Call load_agent() first."
+            raise ValueError(error_message)
         runner = InMemoryRunner(self._agent)
         user_id = user_id or str(uuid4())
         session_id = session_id or str(uuid4())
         runner.session_service.create_session(
-            app_name=runner.app_name, user_id=user_id, session_id=session_id
+            app_name=runner.app_name,
+            user_id=user_id,
+            session_id=session_id,
         )
-        events = runner.run_async(
+
+        async for _ in runner.run_async(
             user_id=user_id,
             session_id=session_id,
             new_message=types.Content(role="user", parts=[types.Part(text=prompt)]),
-        )
-
-        async for event in events:
-            logger.debug(event)
-            if event.is_final_response():
-                break
+            **kwargs,
+        ):
+            pass
 
         session = runner.session_service.get_session(
-            app_name=runner.app_name, user_id=user_id, session_id=session_id
+            app_name=runner.app_name,
+            user_id=user_id,
+            session_id=session_id,
         )
-        return session.state.get("response", None)
-
-    @property
-    def tools(self) -> List[str]:
-        """
-        Return the tools used by the agent.
-        This property is read-only and cannot be modified.
-        """
-        if hasattr(self, "_agent"):
-            tools = [tool.name for tool in self._agent.tools]
-        else:
-            logger.warning("Agent not loaded or does not have tools.")
-            tools = []
-        return tools
+        assert session, "Session should not be None"
+        return str(session.state.get("response"))

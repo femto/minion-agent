@@ -1,13 +1,11 @@
-"""Minion Manus - A wrapper for smolagents."""
-
-__version__ = "0.1.0"
-
-
-from .config import AgentConfig, AgentFramework, Settings
+from .config import AgentConfig, AgentFramework, TracingConfig
 from .frameworks.minion_agent import MinionAgent
-from .utils import setup_logging
+from .tracing.agent_trace import AgentTrace
 
-settings = Settings.from_env()  # 或传入自定义设置
-setup_logging(settings)
-
-__all__ = ["MinionAgent", "AgentConfig", "AgentFramework"]
+__all__ = [
+    "AgentConfig",
+    "AgentFramework",
+    "AgentTrace",
+    "MinionAgent",
+    "TracingConfig",
+]
