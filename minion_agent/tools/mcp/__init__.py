@@ -6,7 +6,6 @@ from .frameworks import (
     MCPServer,
     OpenAIMCPServer,
     SmolagentsMCPServer,
-    TinyAgentMCPServer,
     _get_mcp_server,
 )
 from .mcp_connection import _MCPConnection
@@ -20,7 +19,6 @@ __all__ = [
     "MCPServer",
     "OpenAIMCPServer",
     "SmolagentsMCPServer",
-    "TinyAgentMCPServer",
     "_MCPConnection",
     "_MCPServerBase",
     "_get_mcp_server",
