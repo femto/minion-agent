@@ -1,6 +1,8 @@
 """Example usage of Minion Agent."""
 
 import asyncio
+import logging
+
 from dotenv import load_dotenv
 import os
 from PIL import Image
@@ -12,6 +14,7 @@ from smolagents.models import parse_json_if_needed
 from custom_azure_model import CustomAzureOpenAIServerModel
 import minion_agent
 from minion_agent.config import MCPStdio, MCPSse
+from minion_agent.logging import setup_logger
 from minion_agent.tools.run_apple_script import run_applescript, run_applescript_capture, run_command
 
 
@@ -92,7 +95,7 @@ run_applescript,run_applescript_capture,run_command,
 #"step_callbacks":[save_screenshot]
                 }
 )
-
+# setup_logger(logging.DEBUG)
 async def main():
     try:
         # Create and run the agent
