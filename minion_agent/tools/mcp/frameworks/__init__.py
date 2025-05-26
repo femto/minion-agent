@@ -8,6 +8,7 @@ from .langchain import LangchainMCPServer
 from .llama_index import LlamaIndexMCPServer
 from .openai import OpenAIMCPServer
 from .smolagents import SmolagentsMCPServer
+from .tinyagent import TinyAgentMCPServer
 
 MCPServer = (
     AgnoMCPServer
@@ -16,6 +17,7 @@ MCPServer = (
     | LlamaIndexMCPServer
     | OpenAIMCPServer
     | SmolagentsMCPServer
+    | TinyAgentMCPServer
 
 )
 
@@ -28,6 +30,7 @@ def _get_mcp_server(mcp_tool: MCPParams, agent_framework: AgentFramework) -> MCP
         AgentFramework.OPENAI: OpenAIMCPServer,
         AgentFramework.AGNO: AgnoMCPServer,
         AgentFramework.SMOLAGENTS: SmolagentsMCPServer,
+        AgentFramework.TINYAGENT: TinyAgentMCPServer,
 
     }
     cls = mapping.get(agent_framework)

@@ -81,7 +81,7 @@ class LangchainMCPServerBase(_MCPServerBase["BaseTool"], ABC):
     framework: Literal[AgentFramework.LANGCHAIN] = AgentFramework.LANGCHAIN
 
     def _check_dependencies(self) -> None:
-        self.libraries = "any-agent[mcp,langchain]"
+        self.libraries = "minion-agent[mcp,langchain]"
         self.mcp_available = mcp_available
         super()._check_dependencies()
 

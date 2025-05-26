@@ -65,7 +65,7 @@ class SmolagentsMCPServerBase(_MCPServerBase["SmolagentsTool"], ABC):
 
     def _check_dependencies(self) -> None:
         """Check if the required dependencies for the MCP server are available."""
-        self.libraries = "any-agent[mcp,smolagents]"
+        self.libraries = "minion-agent[mcp,smolagents]"
         self.mcp_available = mcp_available
         super()._check_dependencies()
 

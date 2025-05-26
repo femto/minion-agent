@@ -76,7 +76,7 @@ class GoogleMCPServerBase(_MCPServerBase["GoogleMCPTool"], ABC):
 
     def _check_dependencies(self) -> None:
         """Check if the required dependencies for the MCP server are available."""
-        self.libraries = "any-agent[mcp,google]"
+        self.libraries = "minion-agent[mcp,google]"
         self.mcp_available = mcp_available
         super()._check_dependencies()
 

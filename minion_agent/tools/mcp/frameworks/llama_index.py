@@ -66,7 +66,7 @@ class LlamaIndexMCPServerBase(_MCPServerBase["LlamaIndexFunctionTool"], ABC):
 
     def _check_dependencies(self) -> None:
         """Check if the required dependencies for the MCP server are available."""
-        self.libraries = "any-agent[mcp,llama_index]"
+        self.libraries = "minion-agent[mcp,llama_index]"
         self.mcp_available = mcp_available
         super()._check_dependencies()
 
