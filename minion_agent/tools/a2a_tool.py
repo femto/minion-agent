@@ -35,7 +35,7 @@ async def a2a_query(url: str) -> Callable[[str], Coroutine[Any, Any, str]]:
 
     """
     if not a2a_tool_available:
-        msg = "You need to `pip install 'any-agent[a2a]'` to use this tool"
+        msg = "You need to `pip install 'minion-agent[a2a]'` to use this tool"
         raise ImportError(msg)
 
     async with httpx.AsyncClient(follow_redirects=True) as resolver_client:

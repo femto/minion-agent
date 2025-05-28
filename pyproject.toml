@@ -65,8 +65,9 @@ deep-research = [
     "langchain>=0.3.23",
     "gradio>=5.25.0",
 ]
-serve = [
-  "a2a-sdk",
+a2a = [
+  "a2a-sdk>=0.2.5",
+  "httpx",
 ]
 all = [
   "minion-agent-x[google,smolagents,mcp,minion,deep-research]"
