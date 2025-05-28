@@ -5,11 +5,10 @@ from contextlib import suppress
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
-if TYPE_CHECKING:
-    from a2a.types import AgentCard
-
 a2a_tool_available = False
 with suppress(ImportError):
+    if TYPE_CHECKING:
+        from a2a.types import AgentCard
     import httpx
     from a2a.client import A2ACardResolver, A2AClient
     from a2a.types import (
