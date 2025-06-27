@@ -1,4 +1,4 @@
-"""Example usage of Minion Agent."""
+"""Example usage of Minion Agent with Apple Script tools."""
 
 import asyncio
 import logging
@@ -16,6 +16,20 @@ import minion_agent
 from minion_agent.config import MCPStdio, MCPSse
 from minion_agent.logging import setup_logger
 from minion_agent.tools.run_apple_script import run_applescript, run_applescript_capture, run_command
+
+# Import Apple Script tools
+from minion_agent.tools.apple_script_tools import (
+    create_calendar_event,
+    create_reminder, 
+    create_note,
+    compose_email,
+    send_sms,
+    get_contact_phone,
+    get_contact_email,
+    open_location_maps,
+    get_directions_maps,
+    spotlight_search_open
+)
 
 
 def parse_tool_args_if_needed(message: ChatMessage) -> ChatMessage:
@@ -69,31 +83,36 @@ from smolagents import (
 agent_config = AgentConfig(
     model_id=os.environ.get("AZURE_DEPLOYMENT_NAME"),
     name="research_assistant",
-    description="A helpful research assistant",
+    description="A helpful research assistant with Apple Script capabilities",
     model_args={"azure_endpoint": os.environ.get("AZURE_OPENAI_ENDPOINT"),
                 "api_key": os.environ.get("AZURE_OPENAI_API_KEY"),
                 "api_version": os.environ.get("OPENAI_API_VERSION"),
                 },
     tools=[
-        #minion_agent.tools.browser_tool.browser,
-run_applescript,run_applescript_capture,run_command,
+        # Basic Apple Script tools
+        run_applescript, run_applescript_capture, run_command,
+        
+        # Apple Script wrapper tools
+        create_calendar_event,
+        create_reminder, 
+        create_note,
+        compose_email,
+        send_sms,
+        get_contact_phone,
+        get_contact_email,
+        open_location_maps,
+        get_directions_maps,
+        spotlight_search_open,
+        
+        # MCP tools
         MCPStdio(
             command="npx",
             args=["-y", "@modelcontextprotocol/server-filesystem","/Users/femtozheng/workspace","/Users/femtozheng/python-project/minion-agent"]
         ),
-# MCPStdio(
-#             command="npx",
-#             args=["-y", "@smithery/cli@latest", "run", "@Dhravya/apple-mcp","--key","431d6d12-c9ea-4a6d-a033-f9ddbe0ae7e1"]
-#         ),
-
     ],
-    model_type=AzureOpenAIServerModel,  # Updated to use our custom model
-    #model_type="CustomAzureOpenAIServerModel",  # Updated to use our custom model
+    model_type=AzureOpenAIServerModel,
     agent_type=CodeAgent,
-    agent_args={"additional_authorized_imports":"*",
-                #"planning_interval":3
-#"step_callbacks":[save_screenshot]
-                }
+    agent_args={"additional_authorized_imports":"*"}
 )
 # setup_logger(logging.DEBUG)
 async def main():
@@ -102,23 +121,20 @@ async def main():
         agent = await MinionAgent.create_async(AgentFramework.SMOLAGENTS, agent_config)
         #agent = await MinionAgent.create_async(AgentFramework.TINYAGENT, agent_config)
 
-        # Run the agent with a question
-        #result = await agent.run_async("search sam altman and export summary as markdown")
-        #result = await agent.run_async("What are the latest developments in AI, find this information and export as markdown")
-        #result = await agent.run_async("打开微信公众号")
-        #result = await agent.run_async("搜索最新的人工智能发展趋势，并且总结为markdown")
-        #result = agent.run("go visit https://www.baidu.com and clone it")
-        #result = await agent.run_async("复刻一个电商网站,例如京东")
-        #result = await agent.run_async("go visit https://www.baidu.com , take a screenshot and clone it")
-        #result = await agent.run("实现一个贪吃蛇游戏")
-        #result = await agent.run_async("Let $\mathcal{B}$ be the set of rectangular boxes with surface area $54$ and volume $23$. Let $r$ be the radius of the smallest sphere that can contain each of the rectangular boxes that are elements of $\mathcal{B}$. The value of $r^2$ can be written as $\frac{p}{q}$, where $p$ and $q$ are relatively prime positive integers. Find $p+q$.")
-        #result = await agent.run_async("使用apple script帮我看一下微信上发给'新智元 ASI' hello")
-        #result = await agent.run_async("使用apple script帮我添加一个note, 明天早上8:00我要锻炼，并且添加到提醒, 并且发信给femtowin@gmail.com")
-        result = await agent.run_async("提醒今晚9:15鼠标要充电")
-        # result = await agent.run_async("Write a 500000 characters novel named 'Reborn in Skyrim'. "
-        #       "Fill the empty nodes with your own ideas. Be creative! Use your own words!"
-        #       "I will tip you $100,000 if you write a good novel."
-        #       "Since the novel is very long, you may need to divide it into subtasks.")
+        # Test various Apple Script functionalities
+        
+        # Example 1: Create a reminder
+        # result = await agent.run_async("提醒今晚9:15鼠标要充电")
+        
+        # Example 2: Create a note and reminder
+        # result = await agent.run_async("添加一个note, 明天早上8:00我要锻炼，并且添加到提醒")
+        
+        # Example 3: Send email
+        # result = await agent.run_async("发信给femtowin@gmail.com, 主题是测试邮件, 内容是这是一个测试邮件")
+        
+        # Example 4: Multiple tasks
+        result = await agent.run_async("帮我做以下几件事：1. 添加一个提醒明天下午3点开会 2. 创建一个笔记记录今天的工作内容 3. 查看我的联系人中是否有femto的信息")
+        
         print("Agent's response:", result)
     except Exception as e:
         print(f"Error: {str(e)}")
