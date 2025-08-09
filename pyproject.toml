@@ -9,7 +9,8 @@ dependencies = [
     "smolagents>=0.0.1",
     "python-dotenv>=1.0.0",
     "browser-use>=0.0.1",
-    "loguru>=0.0.1"
+    "loguru>=0.0.1",
+
 ]
 requires-python = ">=3.11"
 

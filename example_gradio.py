@@ -17,7 +17,6 @@ from minion_agent.config import MCPStdio, MCPSse
 from minion_agent.logging import setup_logger
 from minion_agent.tools.run_apple_script import run_applescript, run_applescript_capture, run_command
 
-
 def parse_tool_args_if_needed(message: ChatMessage) -> ChatMessage:
     for tool_call in message.tool_calls:
         tool_call.function.arguments = parse_json_if_needed(tool_call.function.arguments)
@@ -108,12 +107,10 @@ async def main():
         )
 
 
-
         # 启动界面，设置一些参数
         # gradio_ui.launch(
         # )
         #agent = await MinionAgent.create_async(AgentFramework.TINYAGENT, agent_config)
-
         # Run the agent with a question
         #result = await agent.run_async("search sam altman and export summary as markdown")
         #result = await agent.run_async("What are the latest developments in AI, find this information and export as markdown")
