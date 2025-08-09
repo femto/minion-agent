@@ -2,14 +2,14 @@
 
 import os
 from abc import ABC, abstractmethod
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from contextlib import suppress
 from datetime import timedelta
 from typing import Any, Literal
 
-from pydantic import PrivateAttr
+from pydantic import Field, PrivateAttr
 
-from minion_agent.config import AgentFramework, MCPSse, MCPStdio, Tool
+from minion_agent.config import AgentFramework, MCPSse, MCPStdio, MCPStreamableHttp, Tool
 from minion_agent.tools.mcp.mcp_connection import _MCPConnection
 from minion_agent.tools.mcp.mcp_server import _MCPServerBase
 
@@ -19,6 +19,7 @@ with suppress(ImportError):
     from mcp import ClientSession, StdioServerParameters
     from mcp.client.sse import sse_client
     from mcp.client.stdio import stdio_client
+    from mcp.client.streamable_http import streamablehttp_client
     from mcp.types import Tool as MCPTool  # noqa: TC002
 
     mcp_available = True
@@ -28,6 +29,7 @@ class TinyAgentMCPConnection(_MCPConnection["MCPTool"], ABC):
     """Base class for TinyAgent MCP connections."""
 
     _client: Any | None = PrivateAttr(default=None)
+    _session: ClientSession | None = None
 
     @abstractmethod
     async def list_tools(self) -> list["MCPTool"]:
@@ -36,30 +38,8 @@ class TinyAgentMCPConnection(_MCPConnection["MCPTool"], ABC):
             msg = "MCP client is not set up. Please call `setup` from a concrete class."
             raise ValueError(msg)
 
-        # Setup the client connection using exit stack to manage lifecycle
-        stdio, write = await self._exit_stack.enter_async_context(self._client)
-
-        # Create a client session
-        client_session = ClientSession(
-            stdio,
-            write,
-            timedelta(seconds=self.mcp_tool.client_session_timeout_seconds)
-            if self.mcp_tool.client_session_timeout_seconds
-            else None,
-        )
-
-        # Start the session
-        session: ClientSession = await self._exit_stack.enter_async_context(
-            client_session
-        )
-        if not session:
-            msg = "Failed to create MCP session"
-            raise ValueError(msg)
-
-        await session.initialize()
-
         # Get the available tools from the MCP server using schema
-        available_tools = await session.list_tools()
+        available_tools = await self._session.list_tools()  # type: ignore[union-attr]
 
         # Filter tools if specific tools were requested
         filtered_tools = self._filter_tools(available_tools.tools)
@@ -67,7 +47,7 @@ class TinyAgentMCPConnection(_MCPConnection["MCPTool"], ABC):
         # Create callable tool functions
         tool_list = list[Any]()
         for tool_info in filtered_tools:
-            tool_list.append(self._create_tool_from_info(tool_info, session))  # type: ignore[arg-type]
+            tool_list.append(self._create_tool_from_info(tool_info, self._session))  # type: ignore[arg-type]
 
         return tool_list
 
@@ -122,6 +102,26 @@ class TinyAgentMCPStdioConnection(TinyAgentMCPConnection):
 
         self._client = stdio_client(server_params)
 
+        # Setup the client connection using exit stack to manage lifecycle
+        read, write = await self._exit_stack.enter_async_context(self._client)
+
+        # Create a client session
+        client_session = ClientSession(
+            read,
+            write,
+            timedelta(seconds=self.mcp_tool.client_session_timeout_seconds)
+            if self.mcp_tool.client_session_timeout_seconds
+            else None,
+        )
+
+        # Start the session
+        self._session = await self._exit_stack.enter_async_context(client_session)
+        if not self._session:
+            msg = "Failed to create MCP session"
+            raise ValueError(msg)
+
+        await self._session.initialize()
+
         return await super().list_tools()
 
 
@@ -130,17 +130,90 @@ class TinyAgentMCPSseConnection(TinyAgentMCPConnection):
 
     async def list_tools(self) -> list["MCPTool"]:
         """List tools from the MCP server."""
+        kwargs = {}
+        if self.mcp_tool.client_session_timeout_seconds:
+            kwargs["sse_read_timeout"] = self.mcp_tool.client_session_timeout_seconds
         self._client = sse_client(
             url=self.mcp_tool.url,
             headers=dict(self.mcp_tool.headers or {}),
+            **kwargs,  # type: ignore[arg-type]
         )
+
+        # Setup the client connection using exit stack to manage lifecycle
+        read, write = await self._exit_stack.enter_async_context(self._client)
+
+        # Create a client session
+        client_session = ClientSession(
+            read,
+            write,
+            timedelta(seconds=self.mcp_tool.client_session_timeout_seconds)
+            if self.mcp_tool.client_session_timeout_seconds
+            else None,
+        )
+
+        # Start the session
+        self._session = await self._exit_stack.enter_async_context(client_session)
+        if not self._session:
+            msg = "Failed to create MCP session"
+            raise ValueError(msg)
+
+        await self._session.initialize()
+
+        return await super().list_tools()
+
+
+class TinyAgentMCPStreamableHttpConnection(TinyAgentMCPConnection):
+    mcp_tool: MCPStreamableHttp
+    _get_session_id_callback: Callable[[], str | None] | None = None
+
+    def get_session_id(self) -> str | None:
+        """Retrieve session ID, if it has been established."""
+        if self._get_session_id_callback:
+            return self._get_session_id_callback()
+        return None
+
+    async def list_tools(self) -> list["MCPTool"]:
+        """List tools from the MCP server."""
+        kwargs = {}
+        if self.mcp_tool.client_session_timeout_seconds:
+            kwargs["sse_read_timeout"] = self.mcp_tool.client_session_timeout_seconds
+        self._client = streamablehttp_client(
+            url=self.mcp_tool.url,
+            headers=dict(self.mcp_tool.headers or {}),
+            **kwargs,  # type: ignore[arg-type]
+        )
+
+        # Setup the client connection using exit stack to manage lifecycle
+        streamablehttp_transport = await self._exit_stack.enter_async_context(
+            self._client
+        )
+        read, write, get_session_id_callback = streamablehttp_transport
+        self._get_session_id_callback = get_session_id_callback
+
+        # Create a client session
+        client_session = ClientSession(
+            read,
+            write,
+            timedelta(seconds=self.mcp_tool.client_session_timeout_seconds)
+            if self.mcp_tool.client_session_timeout_seconds
+            else None,
+        )
+
+        # Start the session
+        self._session = await self._exit_stack.enter_async_context(client_session)
+        if not self._session:
+            msg = "Failed to create MCP session"
+            raise ValueError(msg)
+
+        await self._session.initialize()
 
         return await super().list_tools()
 
 
 class TinyAgentMCPServerBase(_MCPServerBase["MCPTool"], ABC):
     framework: Literal[AgentFramework.TINYAGENT] = AgentFramework.TINYAGENT
-    libraries: str = "minion-agent[mcp]"
+    tools: Sequence["MCPTool"] = Field(default_factory=list)
+    libraries: str = "minion-agent-x[mcp]"
 
     def _check_dependencies(self) -> None:
         """Check if the required dependencies for the MCP server are available."""
@@ -172,4 +245,18 @@ class TinyAgentMCPServerSse(TinyAgentMCPServerBase):
         await super()._setup_tools(mcp_connection)
 
 
-TinyAgentMCPServer = TinyAgentMCPServerStdio | TinyAgentMCPServerSse
+class TinyAgentMCPServerStreamableHttp(TinyAgentMCPServerBase):
+    mcp_tool: MCPStreamableHttp
+
+    async def _setup_tools(
+        self, mcp_connection: _MCPConnection["MCPTool"] | None = None
+    ) -> None:
+        mcp_connection = mcp_connection or TinyAgentMCPStreamableHttpConnection(
+            mcp_tool=self.mcp_tool
+        )
+        await super()._setup_tools(mcp_connection)
+
+
+TinyAgentMCPServer = (
+    TinyAgentMCPServerStdio | TinyAgentMCPServerSse | TinyAgentMCPServerStreamableHttp
+)

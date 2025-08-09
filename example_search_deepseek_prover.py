@@ -24,7 +24,6 @@ from minion_agent import MinionAgent, AgentConfig, AgentFramework
 from smolagents import (
     DuckDuckGoSearchTool,
     VisitWebpageTool,
-    HfApiModel,
     ActionStep,
 )
 

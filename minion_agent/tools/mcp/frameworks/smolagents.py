@@ -1,10 +1,11 @@
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from contextlib import suppress
 from typing import Literal
 
-from pydantic import PrivateAttr
+from pydantic import Field, PrivateAttr
 
-from minion_agent.config import AgentFramework, MCPSse, MCPStdio
+from minion_agent.config import AgentFramework, MCPSse, MCPStdio, MCPStreamableHttp
 from minion_agent.tools.mcp.mcp_connection import _MCPConnection
 from minion_agent.tools.mcp.mcp_server import _MCPServerBase
 
@@ -43,7 +44,12 @@ class SmolagentsMCPStdioConnection(SmolagentsMCPConnection):
             args=list(self.mcp_tool.args),
             env=self.mcp_tool.env,
         )
-        self._client = MCPClient(server_parameters)
+        adapter_kwargs = {}
+        if self.mcp_tool.client_session_timeout_seconds:
+            adapter_kwargs["connect_timeout"] = (
+                self.mcp_tool.client_session_timeout_seconds
+            )
+        self._client = MCPClient(server_parameters, adapter_kwargs=adapter_kwargs)
         return await super().list_tools()
 
 
@@ -52,20 +58,40 @@ class SmolagentsMCPSseConnection(SmolagentsMCPConnection):
 
     async def list_tools(self) -> list["SmolagentsTool"]:
         """List tools from the MCP server."""
-        server_parameters = {
-            "url": self.mcp_tool.url,
-        }
-        self._client = MCPClient(server_parameters)
+        server_parameters = {"url": self.mcp_tool.url, "transport": "sse"}
+        adapter_kwargs = {}
+        if self.mcp_tool.client_session_timeout_seconds:
+            adapter_kwargs["connect_timeout"] = (
+                self.mcp_tool.client_session_timeout_seconds
+            )
+        self._client = MCPClient(server_parameters, adapter_kwargs=adapter_kwargs)
+
+        return await super().list_tools()
+
+
+class SmolagentsMCPStreamableHttpConnection(SmolagentsMCPConnection):
+    mcp_tool: MCPStreamableHttp
+
+    async def list_tools(self) -> list["SmolagentsTool"]:
+        """List tools from the MCP server."""
+        server_parameters = {"url": self.mcp_tool.url, "transport": "streamable-http"}
+        adapter_kwargs = {}
+        if self.mcp_tool.client_session_timeout_seconds:
+            adapter_kwargs["connect_timeout"] = (
+                self.mcp_tool.client_session_timeout_seconds
+            )
+        self._client = MCPClient(server_parameters, adapter_kwargs=adapter_kwargs)
 
         return await super().list_tools()
 
 
 class SmolagentsMCPServerBase(_MCPServerBase["SmolagentsTool"], ABC):
     framework: Literal[AgentFramework.SMOLAGENTS] = AgentFramework.SMOLAGENTS
+    tools: Sequence["SmolagentsTool"] = Field(default_factory=list)
 
     def _check_dependencies(self) -> None:
         """Check if the required dependencies for the MCP server are available."""
-        self.libraries = "minion-agent[mcp,smolagents]"
+        self.libraries = "minion-agent-x[mcp,smolagents]"
         self.mcp_available = mcp_available
         super()._check_dependencies()
 
@@ -94,4 +120,20 @@ class SmolagentsMCPServerSse(SmolagentsMCPServerBase):
         await super()._setup_tools(mcp_connection)
 
 
-SmolagentsMCPServer = SmolagentsMCPServerStdio | SmolagentsMCPServerSse
+class SmolagentsMCPServerStreamableHttp(SmolagentsMCPServerBase):
+    mcp_tool: MCPStreamableHttp
+
+    async def _setup_tools(
+        self, mcp_connection: _MCPConnection["SmolagentsTool"] | None = None
+    ) -> None:
+        mcp_connection = mcp_connection or SmolagentsMCPStreamableHttpConnection(
+            mcp_tool=self.mcp_tool
+        )
+        await super()._setup_tools(mcp_connection)
+
+
+SmolagentsMCPServer = (
+    SmolagentsMCPServerStdio
+    | SmolagentsMCPServerSse
+    | SmolagentsMCPServerStreamableHttp
+)

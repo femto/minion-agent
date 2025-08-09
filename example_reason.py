@@ -28,7 +28,7 @@ from smolagents import (
     ToolCallingAgent,
     DuckDuckGoSearchTool,
     VisitWebpageTool,
-    HfApiModel, AzureOpenAIServerModel, ActionStep,
+    AzureOpenAIServerModel, ActionStep,
 )
 
 # Configure the agent

@@ -1,9 +1,9 @@
+import warnings
 from collections.abc import Callable, Mapping, MutableMapping, Sequence
 from enum import StrEnum, auto
 from typing import Any, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-
 
 class AgentFramework(StrEnum):
     GOOGLE = auto()
@@ -52,6 +52,8 @@ class MCPStdio(BaseModel):
     Use it to limit the tools accessible by the agent.
     For example, if you use [`mcp/filesystem`](https://hub.docker.com/r/mcp/filesystem),
     you can pass `tools=["read_file", "list_directory"]` to limit the agent to read-only operations.
+
+    If none is specified, the default behavior is that the agent will have access to all tools under that MCP server.
     """
 
     client_session_timeout_seconds: float | None = 5
@@ -61,6 +63,37 @@ class MCPStdio(BaseModel):
 
 
 class MCPSse(BaseModel):
+    @model_validator(mode="before")
+    @classmethod
+    def sse_deprecation(cls, data: Any) -> Any:
+        warnings.warn(
+            "SSE is deprecated in the MCP specification in favor of Streamable HTTP as of version 2025-03-26",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return data
+
+    url: str
+    """The URL of the server."""
+
+    headers: Mapping[str, str] | None = None
+    """The headers to send to the server."""
+
+    tools: Sequence[str] | None = None
+    """List of tool names to use from the MCP Server.
+
+    Use it to limit the tools accessible by the agent.
+    For example, if you use [`mcp/filesystem`](https://hub.docker.com/r/mcp/filesystem),
+    you can pass `tools=["read_file", "list_directory"]` to limit the agent to read-only operations.
+    """
+
+    client_session_timeout_seconds: float | None = 5
+    """the read timeout passed to the MCP ClientSession."""
+
+    model_config = ConfigDict(frozen=True)
+
+
+class MCPStreamableHttp(BaseModel):
     url: str
     """The URL of the server."""
 
@@ -104,36 +137,13 @@ class ServingConfig(BaseModel):
     version: str = "0.1.0"
 
 
-class TracingConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    console: bool = True
-    """Whether to show spans in the console."""
-
-    call_llm: str | None = "yellow"
-    """Color used to display LLM call spans in the console."""
-
-    execute_tool: str | None = "blue"
-    """Color used to display tool execution spans in the console."""
-
-    cost_info: bool = True
-    """Whether spans should include cost information"""
-
-    @model_validator(mode="after")
-    def validate_console_flags(self) -> Self:
-        if self.console and not any([self.call_llm, self.execute_tool]):
-            msg = "At least one of `[self.call_llm, self.execute_tool]` must be set"
-            raise ValueError(msg)
-        return self
-
-
-MCPParams = MCPStdio | MCPSse
+MCPParams = MCPStdio | MCPSse | MCPStreamableHttp
 
 Tool = str | MCPParams | Callable[..., Any]
 
 
 class AgentConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
 
     model_id: str
     """Select the underlying model used by the agent.
@@ -147,19 +157,25 @@ class AgentConfig(BaseModel):
     description: str | None = None
     """Description of the agent."""
 
-    name: str = "minion_agent"
+    name: str = "any_agent"
     """The name of the agent.
 
-    Defaults to `minion_agent`.
+    Defaults to `any_agent`.
     """
 
     instructions: str | None = None
     """Specify the instructions for the agent (often also referred to as a `system_prompt`)."""
 
-    tools: Sequence[Tool] = Field(default_factory=list)
+    tools: list[Tool] = Field(default_factory=list)
     """List of tools to be used by the agent.
 
-    See more info at [Tools](../tools.md).
+    See more info at [Tools](../agents/tools.md).
+    """
+
+    #callbacks: list[Callback] = Field(default_factory=get_default_callbacks)
+    """List of callbacks to use during agent invocation.
+
+    See more info at [Callbacks](../agents/callbacks.md).
     """
 
     agent_type: Callable[..., Any] | None = None
@@ -183,7 +199,7 @@ class AgentConfig(BaseModel):
 
     agent = MinionAgent.create(
         AgentConfig(
-            model_id="gpt-4.1-mini",
+            model_id="mistral/mistral-small-latest",
             instructions="Extract calendar events from text",
             agent_args={
                 "output_type": CalendarEvent
@@ -204,3 +220,31 @@ class AgentConfig(BaseModel):
 
     Refer to LiteLLM Completion API Docs for more info.
     """
+
+    output_type: type[BaseModel] | None = None
+    """Control the output schema from calling `run`. By default, the agent will return a type str.
+
+    Using this parameter you can define a Pydantic model that will be returned by the agent run methods.
+    """
+
+class TracingConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    console: bool = True
+    """Whether to show spans in the console."""
+
+    call_llm: str | None = "yellow"
+    """Color used to display LLM call spans in the console."""
+
+    execute_tool: str | None = "blue"
+    """Color used to display tool execution spans in the console."""
+
+    cost_info: bool = True
+    """Whether spans should include cost information"""
+
+    @model_validator(mode="after")
+    def validate_console_flags(self) -> Self:
+        if self.console and not any([self.call_llm, self.execute_tool]):
+            msg = "At least one of `[self.call_llm, self.execute_tool]` must be set"
+            raise ValueError(msg)
+        return self

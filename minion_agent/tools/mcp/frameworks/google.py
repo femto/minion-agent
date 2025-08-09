@@ -1,36 +1,42 @@
 from abc import ABC, abstractmethod
-from contextlib import suppress
+from collections.abc import Sequence
 from typing import Literal
 
-from pydantic import PrivateAttr
+from pydantic import Field, PrivateAttr
 
 from minion_agent.config import (
     AgentFramework,
     MCPSse,
     MCPStdio,
+    MCPStreamableHttp,
 )
 from minion_agent.tools.mcp.mcp_connection import _MCPConnection
 from minion_agent.tools.mcp.mcp_server import _MCPServerBase
 
-mcp_available = False
-with suppress(ImportError):
+try:
     from google.adk.tools.mcp_tool import MCPTool as GoogleMCPTool
     from google.adk.tools.mcp_tool import MCPToolset as GoogleMCPToolset
-    from google.adk.tools.mcp_tool.mcp_toolset import (  # type: ignore[attr-defined]
-        SseServerParams as GoogleSseServerParameters,
+    from google.adk.tools.mcp_tool.mcp_session_manager import (
+        SseConnectionParams as GoogleSseServerParameters,
     )
-    from google.adk.tools.mcp_tool.mcp_toolset import (  # type: ignore[attr-defined]
+    from google.adk.tools.mcp_tool.mcp_session_manager import StdioConnectionParams
+    from google.adk.tools.mcp_tool.mcp_session_manager import (
+        StreamableHTTPConnectionParams as GoogleStreamableHTTPServerParameters,
+    )
+    from mcp import (
         StdioServerParameters as GoogleStdioServerParameters,
     )
 
     mcp_available = True
+except ImportError:
+    mcp_available = False
 
 
 class GoogleMCPConnection(_MCPConnection["GoogleMCPTool"], ABC):
     """Base class for Google MCP connections."""
 
-    _params: "GoogleStdioServerParameters | GoogleSseServerParameters | None" = (
-        PrivateAttr(default=None)
+    _params: "GoogleStdioServerParameters | GoogleSseServerParameters | GoogleStreamableHTTPServerParameters | StdioConnectionParams | None" = PrivateAttr(
+        default=None
     )
 
     @abstractmethod
@@ -41,8 +47,7 @@ class GoogleMCPConnection(_MCPConnection["GoogleMCPTool"], ABC):
             raise ValueError(msg)
 
         server = GoogleMCPToolset(connection_params=self._params)
-        await self._exit_stack.enter_async_context(server)
-        tools = await server.load_tools()
+        tools = await server.get_tools()
         return self._filter_tools(tools)  # type: ignore[return-value]
 
 
@@ -51,11 +56,20 @@ class GoogleMCPStdioConnection(GoogleMCPConnection):
 
     async def list_tools(self) -> list["GoogleMCPTool"]:
         """List tools from the MCP server."""
-        self._params = GoogleStdioServerParameters(
+        server_params = GoogleStdioServerParameters(
             command=self.mcp_tool.command,
             args=list(self.mcp_tool.args),
             env=self.mcp_tool.env,
         )
+
+        timeout = self.mcp_tool.client_session_timeout_seconds
+        if timeout is None:
+            self._params = server_params
+        else:
+            self._params = StdioConnectionParams(
+                server_params=server_params,
+                timeout=timeout,
+            )
         return await super().list_tools()
 
 
@@ -64,7 +78,28 @@ class GoogleMCPSseConnection(GoogleMCPConnection):
 
     async def list_tools(self) -> list["GoogleMCPTool"]:
         """List tools from the MCP server."""
-        self._params = GoogleSseServerParameters(
+        timeout = self.mcp_tool.client_session_timeout_seconds
+        if timeout is None:
+            self._params = GoogleSseServerParameters(
+                url=self.mcp_tool.url,
+                headers=dict(self.mcp_tool.headers or {}),
+            )
+        else:
+            self._params = GoogleSseServerParameters(
+                url=self.mcp_tool.url,
+                headers=dict(self.mcp_tool.headers or {}),
+                timeout=timeout,
+                sse_read_timeout=timeout,
+            )
+        return await super().list_tools()
+
+
+class GoogleMCPStreamableHttpConnection(GoogleMCPConnection):
+    mcp_tool: MCPStreamableHttp
+
+    async def list_tools(self) -> list["GoogleMCPTool"]:
+        """List tools from the MCP server."""
+        self._params = GoogleStreamableHTTPServerParameters(
             url=self.mcp_tool.url,
             headers=dict(self.mcp_tool.headers or {}),
         )
@@ -73,10 +108,11 @@ class GoogleMCPSseConnection(GoogleMCPConnection):
 
 class GoogleMCPServerBase(_MCPServerBase["GoogleMCPTool"], ABC):
     framework: Literal[AgentFramework.GOOGLE] = AgentFramework.GOOGLE
+    tools: Sequence["GoogleMCPTool"] = Field(default_factory=list)
 
     def _check_dependencies(self) -> None:
         """Check if the required dependencies for the MCP server are available."""
-        self.libraries = "minion-agent[mcp,google]"
+        self.libraries = "minion-agent-x[mcp,google]"
         self.mcp_available = mcp_available
         super()._check_dependencies()
 
@@ -105,4 +141,18 @@ class GoogleMCPServerSse(GoogleMCPServerBase):
         await super()._setup_tools(mcp_connection)
 
 
-GoogleMCPServer = GoogleMCPServerStdio | GoogleMCPServerSse
+class GoogleMCPServerStreamableHttp(GoogleMCPServerBase):
+    mcp_tool: MCPStreamableHttp
+
+    async def _setup_tools(
+        self, mcp_connection: _MCPConnection["GoogleMCPTool"] | None = None
+    ) -> None:
+        mcp_connection = mcp_connection or GoogleMCPStreamableHttpConnection(
+            mcp_tool=self.mcp_tool
+        )
+        await super()._setup_tools(mcp_connection)
+
+
+GoogleMCPServer = (
+    GoogleMCPServerStdio | GoogleMCPServerSse | GoogleMCPServerStreamableHttp
+)
