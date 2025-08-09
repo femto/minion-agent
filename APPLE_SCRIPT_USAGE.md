@@ -107,14 +107,6 @@ result = await agent.run_async("帮我创建一个明天下午3点的会议提�
 3. 首次使用时可能需要授予 AppleScript 权限
 4. 时间格式使用 "YYYY-MM-DD HH:MM:SS" 格式
 
-## 测试
-
-运行 `test_apple_script.py` 来测试基本功能：
-
-```bash
-python test_apple_script.py
-```
-
 运行完整的 agent 示例：
 
 ```bash
