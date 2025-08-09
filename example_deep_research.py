@@ -3,8 +3,10 @@ import os
 
 import litellm
 from dotenv import load_dotenv
-from minion_agent.config import AgentConfig, AgentFramework, MCPTool
+from minion_agent.config import AgentConfig, AgentFramework, MCPStdio
 from minion_agent import MinionAgent
+from smolagents import AzureOpenAIServerModel
+import minion_agent
 
 # Load environment variables
 load_dotenv()
@@ -21,13 +23,13 @@ async def main():
                     "api_key": os.environ.get("AZURE_OPENAI_API_KEY"),
                     "api_version": os.environ.get("OPENAI_API_VERSION"),
                     },
-        model_type="AzureOpenAIServerModel",  # Updated to use our custom model
+        model_type=AzureOpenAIServerModel,  # Updated to use our custom model
         # model_type="CustomAzureOpenAIServerModel",  # Updated to use our custom model
         agent_args={"additional_authorized_imports": "*",
                     # "planning_interval":3
                     },
         tools=[
-            MCPTool(
+            MCPStdio(
                 command="npx",
                 args=["-y", "@modelcontextprotocol/server-filesystem", "/Users/femtozheng/workspace",
                       "/Users/femtozheng/python-project/minion-agent"]
@@ -50,7 +52,7 @@ async def main():
     )
 
     # Create the main agent with the research agent as a managed agent
-    main_agent = await MinionAgent.create(
+    main_agent = await MinionAgent.create_async(
         AgentFramework.SMOLAGENTS,
         main_agent_config,
         managed_agents=[research_agent_config]

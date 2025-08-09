@@ -10,25 +10,22 @@ from typing import List, Dict, Optional
 from smolagents import (Tool, ChatMessage)
 from smolagents.models import parse_json_if_needed
 from custom_azure_model import CustomAzureOpenAIServerModel
+from minion_agent.config import MCPStdio
+from smolagents import CodeAgent, ToolCallingAgent, AzureOpenAIServerModel
+import minion_agent
 
 def parse_tool_args_if_needed(message: ChatMessage) -> ChatMessage:
     for tool_call in message.tool_calls:
         tool_call.function.arguments = parse_json_if_needed(tool_call.function.arguments)
     return message
 
-from minion_agent.config import MCPTool
-
-# Load environment variables from .env file
-load_dotenv()
-
 from minion_agent import MinionAgent, AgentConfig, AgentFramework
 
 from smolagents import (
-    CodeAgent,
-    ToolCallingAgent,
     DuckDuckGoSearchTool,
     VisitWebpageTool,
-    HfApiModel, AzureOpenAIServerModel, ActionStep,
+    HfApiModel,
+    ActionStep,
 )
 
 # Set up screenshot callback for Playwright
@@ -70,19 +67,18 @@ agent_config = AgentConfig(
                 "api_version": os.environ.get("OPENAI_API_VERSION"),
                 },
     tools=[
-        "minion_agent.tools.browser_tool.browser",
-        "minion_agent.tools.generation.generate_pdf",
-        "minion_agent.tools.generation.generate_html",
-        "minion_agent.tools.generation.save_and_generate_html",
-        MCPTool(
+        minion_agent.tools.browser_tool.browser,
+        minion_agent.tools.generation.generate_pdf,
+        minion_agent.tools.generation.generate_html,
+        minion_agent.tools.generation.save_and_generate_html,
+        MCPStdio(
             command="npx",
             args=["-y", "@modelcontextprotocol/server-filesystem","/Users/femtozheng/workspace","/Users/femtozheng/python-project/minion-agent"]
         ),
-
     ],
-    agent_type="CodeAgent",
-    model_type="AzureOpenAIServerModel",  # Updated to use our custom model
-    #model_type="CustomAzureOpenAIServerModel",  # Updated to use our custom model
+    agent_type=CodeAgent,
+    model_type=AzureOpenAIServerModel,  # Updated to use our custom model
+    #model_type=CustomAzureOpenAIServerModel,  # Updated to use our custom model
     agent_args={"additional_authorized_imports":"*",
                 #"planning_interval":3
 #"step_callbacks":[save_screenshot]
@@ -93,20 +89,19 @@ managed_agents = [
         name="search_web_agent",
         model_id="gpt-4o-mini",
         description="Agent that can use the browser, search the web,navigate",
-        #tools=["minion_agent.tools.web_browsing.search_web"]
-        tools=["minion_agent.tools.browser_tool.browser"],
-model_args={"azure_endpoint": os.environ.get("AZURE_OPENAI_ENDPOINT"),
+        tools=[minion_agent.tools.browser_tool.browser],
+        model_args={"azure_endpoint": os.environ.get("AZURE_OPENAI_ENDPOINT"),
                 "api_key": os.environ.get("AZURE_OPENAI_API_KEY"),
                 "api_version": os.environ.get("OPENAI_API_VERSION"),
                 },
-model_type="AzureOpenAIServerModel",  # Updated to use our custom model
-    #model_type="CustomAzureOpenAIServerModel",  # Updated to use our custom model
-agent_type="ToolCallingAgent",
-    agent_args={
-        #"additional_authorized_imports":"*",
-                #"planning_interval":3
+        model_type=AzureOpenAIServerModel,  # Updated to use our custom model
+        #model_type=CustomAzureOpenAIServerModel,  # Updated to use our custom model
+        agent_type=ToolCallingAgent,
+        agent_args={
+            #"additional_authorized_imports":"*",
+                    #"planning_interval":3
 
-                }
+                    }
     ),
     # AgentConfig(
     #     name="visit_webpage_agent",
@@ -131,19 +126,9 @@ SmolagentsInstrumentor().instrument(tracer_provider=trace_provider)
 async def main():
     try:
         # Create and run the agent
-        #agent = await MinionAgent.create(AgentFramework.SMOLAGENTS, agent_config, managed_agents)
-        agent = await MinionAgent.create(AgentFramework.SMOLAGENTS, agent_config)
-
+        agent = await MinionAgent.create_async(AgentFramework.SMOLAGENTS, agent_config)
         # Run the agent with a question
-        #result = await agent.run("search sam altman and export summary as markdown")
-        #result = await agent.run("What are the latest developments in AI, find this information and export as markdown")
-        #result = await agent.run("打开微信公众号")
-        #result = await agent.run("搜索最新的人工智能发展趋势，并且总结为markdown")
-        #result = agent.run("go visit https://www.baidu.com and clone it")
-        result = agent.run("搜索Deepseek prover的最新消息，汇总成一个html, 你的html应该尽可能美观,然后保存html到磁盘上")
-        #result = await agent.run("复刻一个电商网站,例如京东")
-        #result = await agent.run("go visit https://www.baidu.com , take a screenshot and clone it")
-        #result = await agent.run("实现一个贪吃蛇游戏")
+        result = await agent.run_async("搜索Deepseek prover的最新消息，汇总成一个html, 你的html应该尽可能美观,然后保存html到磁盘上")
         print("Agent's response:", result)
         print("done")
     except Exception as e:

@@ -2,7 +2,9 @@ import os
 import asyncio
 from dotenv import load_dotenv
 from minion_agent import MinionAgent, AgentConfig, AgentFramework
-from minion_agent.config import MCPTool
+from minion_agent.config import MCPStdio
+from smolagents import CodeAgent, AzureOpenAIServerModel
+import minion_agent
 
 # Load environment variables from .env file
 load_dotenv()
@@ -26,15 +28,15 @@ async def main():
                 "api_version": os.environ.get("OPENAI_API_VERSION"),
                 },
     tools=[
-        "minion_agent.tools.browser_tool.browser",
-        MCPTool(
+        minion_agent.tools.browser_tool.browser,
+        MCPStdio(
             command="npx",
             args=["-y", "@modelcontextprotocol/server-filesystem","/Users/femtozheng/workspace","/Users/femtozheng/python-project/minion-agent",
                   "/Users/femtozheng/space/minion/minion"]
         )
     ],
-    agent_type="CodeAgent",
-    model_type="AzureOpenAIServerModel",  # Updated to use our custom model
+    agent_type=CodeAgent,
+    model_type=AzureOpenAIServerModel,  # Updated to use our custom model
     #model_type="CustomAzureOpenAIServerModel",  # Updated to use our custom model
     agent_args={"additional_authorized_imports":"*",
                 #"planning_interval":3
@@ -44,22 +46,23 @@ async def main():
     # Create browser agent configuration
     browser_agent_config = AgentConfig(
         name="browser_agent",
-        model_type="langchain_openai.AzureChatOpenAI",
+        model_type=AzureOpenAIServerModel,
+        agent_type=CodeAgent,
         model_id=azure_deployment,
         model_args={
             "azure_deployment": azure_deployment,
             "api_version": api_version,
         },
-        tools=[],
+        tools=[minion_agent.tools.browser_tool.browser],
         instructions="I am a browser agent that can perform web browsing tasks."
     )
-    browser_agent = await MinionAgent.create(
+    browser_agent = await MinionAgent.create_async(
         AgentFramework.BROWSER_USE,
         browser_agent_config,
     )
 
     # Create and initialize the main agent with the browser agent as managed agent
-    agent = await MinionAgent.create(
+    agent = await MinionAgent.create_async(
         AgentFramework.SMOLAGENTS,
         main_agent_config,
         managed_agents=[browser_agent]

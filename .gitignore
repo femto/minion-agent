@@ -93,3 +93,5 @@ test-results/
 config.yaml
 .idea
 *.bak
+
+.gradio

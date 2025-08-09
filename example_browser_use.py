@@ -1,9 +1,11 @@
 import os
 import asyncio
 from dotenv import load_dotenv
-from minion_agent.config import AgentConfig
+from minion_agent.config import AgentConfig, MCPStdio
 from minion_agent.frameworks.minion_agent import MinionAgent
 from minion_agent import MinionAgent, AgentConfig, AgentFramework
+from smolagents import CodeAgent, AzureOpenAIServerModel
+import minion_agent
 
 # Load environment variables from .env file
 load_dotenv()
@@ -20,19 +22,25 @@ async def main():
     # Create agent configuration
     config = AgentConfig(
         name="browser-agent",
-        model_type="langchain_openai.AzureChatOpenAI",
+        model_type=AzureOpenAIServerModel,
+        agent_type=CodeAgent,
         model_id=azure_deployment,
         model_args={
             "azure_deployment": azure_deployment,
             "api_version": api_version,
         },
-        # You can specify initial instructions here
+        tools=[
+            minion_agent.tools.browser_tool.browser,
+            MCPStdio(
+                command="npx",
+                args=["-y", "@modelcontextprotocol/server-filesystem","/Users/femtozheng/workspace","/Users/femtozheng/python-project/minion-agent"]
+            )
+        ],
         instructions="Compare the price of gpt-4o and DeepSeek-V3",
-
     )
 
-    # Create and initialize the agent using MinionAgent.create
-    agent = await MinionAgent.create(AgentFramework.BROWSER_USE, config)
+    # Create and initialize the agent using MinionAgent.create_async
+    agent = await MinionAgent.create_async(AgentFramework.BROWSER_USE, config)
 
     # Run the agent with a specific task
     result = await agent.run_async("Compare the price of gpt-4o and DeepSeek-V3 and create a detailed comparison table")
