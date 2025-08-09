@@ -29,6 +29,9 @@ pip install -e .
 Here's a simple example of how to use Minion Agent:
 
 ```python
+from smolagents import (
+    AzureOpenAIServerModel,
+)
 from minion_agent import MinionAgent, AgentConfig, AgentFramework
 from dotenv import load_dotenv
 import os
@@ -44,7 +47,7 @@ async def main():
                     "api_key": os.environ.get("AZURE_OPENAI_API_KEY"),
                     "api_version": os.environ.get("OPENAI_API_VERSION"),
                     },
-        model_type="AzureOpenAIServerModel",  # use "AzureOpenAIServerModel" for auzre, use "OpenAIServerModel" for openai, use "LiteLLMModel" for litellm
+        model_type=AzureOpenAIServerModel,  # use "AzureOpenAIServerModel" for auzre, use "OpenAIServerModel" for openai, use "LiteLLMModel" for litellm
     )
 
     agent = await MinionAgent.create(AgentFramework.SMOLAGENTS, agent_config)
@@ -71,7 +74,9 @@ The `AgentConfig` class accepts the following parameters:
 - `description`: Optional description of the agent
 - `instructions`: Optional system instructions for the agent
 - `tools`: List of tools the agent can use
+- `model_type`: model type of the underlying agent framework
 - `model_args`: Optional dictionary of model-specific arguments
+- `agent_type`: agent type of the underlying agent framework
 - `agent_args`: Optional dictionary of agent-specific arguments
 
 ## MCP Tool Support
@@ -86,7 +91,7 @@ from minion_agent.config import MCPTool
 agent_config = AgentConfig(
     # ... other config options ...
     tools=[
-        "minion_agent.tools.browser_tool.browser",  # Regular tools
+        minion_agent.tools.browser_tool.browser,  # Regular tools
         MCPTool(
             command="npx",
             args=["-y", "@modelcontextprotocol/server-filesystem", "/path/to/workspace"]
@@ -122,9 +127,9 @@ tools=[
 ]
 ```
 
-## Planning Support
+## Planning Support in smolagents
 
-You can enable automatic planning by setting the `planning_interval` in `agent_args`:
+You can enable automatic planning by setting the `planning_interval` in `agent_args` (smolagents) :
 
 ```python
 agent_config = AgentConfig(
