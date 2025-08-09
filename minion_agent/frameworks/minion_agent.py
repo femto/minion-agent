@@ -173,7 +173,7 @@ class MinionAgent(ABC):
             final_output = await self._run_async(prompt, **kwargs)
         trace = self._exporter.pop_trace(run_id)
         trace.final_output = final_output
-        return trace
+        return final_output
 
     def serve(self, serving_config: ServingConfig | None = None) -> None:
         """Serve this agent using the Agent2Agent Protocol (A2A).

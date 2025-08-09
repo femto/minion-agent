@@ -133,7 +133,9 @@ async def main():
         # result = await agent.run_async("发信给femtowin@gmail.com, 主题是测试邮件, 内容是这是一个测试邮件")
         
         # Example 4: Multiple tasks
-        result = await agent.run_async("帮我做以下几件事：1. 添加一个提醒明天下午3点开会 2. 创建一个笔记记录今天的工作内容 3. 查看我的联系人中是否有femto的信息")
+        #result = await agent.run_async("帮我做以下几件事：1. 添加一个提醒明天下午3点开会 2. 创建一个笔记记录今天的工作内容 3. 查看我的联系人中是否有femto的信息")
+
+        result = await agent.run_async("提醒今晚9:15鼠标要充电")
         
         print("Agent's response:", result)
     except Exception as e:

@@ -2,7 +2,7 @@ import datetime
 import platform
 import subprocess
 
-from src.tiny_agent.run_apple_script import run_applescript
+from minion_agent.tools.run_apple_script import run_applescript
 
 
 class Reminders:
