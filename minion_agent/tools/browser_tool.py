@@ -13,7 +13,6 @@ from queue import Empty
 from multiprocessing import Process, Queue
 
 from browser_use import Browser as BrowserUseBrowser
-from browser_use import BrowserConfig
 from browser_use.browser.context import BrowserContext
 from browser_use.dom.service import DomService
 from loguru import logger
@@ -57,10 +56,9 @@ class BrowserProcess:
         
         try:
             # Initialize browser
-            config = BrowserConfig(headless=False)
-            browser = BrowserUseBrowser(config)
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
+            browser = BrowserUseBrowser(headless=False)
             context = loop.run_until_complete(browser.new_context())
             
             while True:
