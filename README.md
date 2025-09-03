@@ -2,7 +2,7 @@
 [![Install](https://img.shields.io/badge/get_started-blue)](https://github.com/femto/minion-agent) 
 [![Discord](https://dcbadge.limes.pink/api/server/HUC6xEK9aT?style=flat)](https://discord.gg/HUC6xEK9aT)
 [![Twitter Follow](https://img.shields.io/twitter/follow/femtowin?style=social)](https://x.com/femtowin)**
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/femto/minion-agent)˚
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/femto/minion-agent)
 # Minion Agent
 
 A simple agent framework that's capable of browser use + mcp + auto instrument + plan + deep research + more
