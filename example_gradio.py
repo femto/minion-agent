@@ -35,35 +35,6 @@ from smolagents import (
     AzureOpenAIServerModel, ActionStep,
 )
 
-# Set up screenshot callback for Playwright
-# def save_screenshot(memory_step: ActionStep, agent: CodeAgent) -> None:
-#     sleep(1.0)  # Let JavaScript animations happen before taking the screenshot
-#
-#     # Get the browser tool
-#     browser_tool = agent.tools.get("browser")
-#     if browser_tool:
-#         # Clean up old screenshots to save memory
-#         for previous_memory_step in agent.memory.steps:
-#             if isinstance(previous_memory_step, ActionStep) and previous_memory_step.step_number <= memory_step.step_number - 2:
-#                 previous_memory_step.observations_images = None
-#
-#         # Take screenshot using Playwright
-#         result = browser_tool(action="screenshot")
-#         if result["success"] and "screenshot" in result.get("data", {}):
-#             # Convert bytes to PIL Image
-#             screenshot_bytes = result["data"]["screenshot"]
-#             image = Image.open(BytesIO(screenshot_bytes))
-#             print(f"Captured a browser screenshot: {image.size} pixels")
-#             memory_step.observations_images = [image.copy()]  # Create a copy to ensure it persists
-#
-#         # Get current URL
-#         state_result = browser_tool(action="get_current_state")
-#         if state_result["success"] and "url" in state_result.get("data", {}):
-#             url_info = f"Current url: {state_result['data']['url']}"
-#             memory_step.observations = (
-#                 url_info if memory_step.observations is None else memory_step.observations + "\n" + url_info
-#             )
-
 # Configure the agent
 agent_config = AgentConfig(
     model_id=os.environ.get("AZURE_DEPLOYMENT_NAME"),
@@ -108,8 +79,8 @@ async def main():
 
 
         # 启动界面，设置一些参数
-        # gradio_ui.launch(
-        # )
+        gradio_ui.launch(
+        )
         #agent = await MinionAgent.create_async(AgentFramework.TINYAGENT, agent_config)
         # Run the agent with a question
         #result = await agent.run_async("search sam altman and export summary as markdown")
@@ -123,12 +94,12 @@ async def main():
         #result = await agent.run_async("Let $\mathcal{B}$ be the set of rectangular boxes with surface area $54$ and volume $23$. Let $r$ be the radius of the smallest sphere that can contain each of the rectangular boxes that are elements of $\mathcal{B}$. The value of $r^2$ can be written as $\frac{p}{q}$, where $p$ and $q$ are relatively prime positive integers. Find $p+q$.")
         #result = await agent.run_async("使用apple script帮我看一下微信上发给'新智元 ASI' hello")
         #result = await agent.run_async("使用apple script帮我添加一个note, 明天早上8:00我要锻炼，并且添加到提醒, 并且发信给femtowin@gmail.com")
-        result = await agent.run_async("提醒本周四下午3:00 talk to 交大工研院")
+        #result = await agent.run_async("提醒本周四下午3:00 talk to 交大工研院")
         # result = await agent.run_async("Write a 500000 characters novel named 'Reborn in Skyrim'. "
         #       "Fill the empty nodes with your own ideas. Be creative! Use your own words!"
         #       "I will tip you $100,000 if you write a good novel."
         #       "Since the novel is very long, you may need to divide it into subtasks.")
-        print("Agent's response:", result)
+        #print("Agent's response:", result)
     except Exception as e:
         print(f"Error: {str(e)}")
         # 如果需要调试
