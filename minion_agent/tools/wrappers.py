@@ -80,6 +80,13 @@ def _wrap_tool_tiny(tool: Tool) -> Tool:
     return tool
 
 
+def _wrap_tool_minion(tool: Tool) -> Tool:
+    """Wrap tool for Minion framework."""
+    # For now, we'll just return the tool as-is
+    # This can be extended later with specific Minion tool wrapping
+    return tool
+
+
 WRAPPERS: dict[AgentFramework, Callable[..., Any]] = {
     AgentFramework.GOOGLE: _wrap_tool_google,
     AgentFramework.OPENAI: _wrap_tool_openai,
@@ -88,6 +95,8 @@ WRAPPERS: dict[AgentFramework, Callable[..., Any]] = {
     AgentFramework.LLAMA_INDEX: _wrap_tool_llama_index,
     AgentFramework.AGNO: _wrap_tool_agno,
     AgentFramework.TINYAGENT: _wrap_tool_tiny,
+    AgentFramework.MINION: _wrap_tool_minion,
+    AgentFramework.EXTERNAL_MINION_AGENT: _wrap_tool_minion,
 }
 
 

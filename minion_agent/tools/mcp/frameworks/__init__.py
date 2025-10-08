@@ -58,6 +58,14 @@ def _get_stdio_mcp_server(
         from .tinyagent import TinyAgentMCPServerStdio
 
         return TinyAgentMCPServerStdio(mcp_tool=mcp_tool)
+    if agent_framework is AgentFramework.MINION:
+        from .minion import MinionMCPServerStdio
+
+        return MinionMCPServerStdio(mcp_tool=mcp_tool)
+    if agent_framework is AgentFramework.EXTERNAL_MINION_AGENT:
+        from .minion import MinionMCPServerStdio
+
+        return MinionMCPServerStdio(mcp_tool=mcp_tool)
     assert_never(agent_framework)
 
 
@@ -90,6 +98,14 @@ def _get_sse_mcp_server(mcp_tool: MCPSse, agent_framework: AgentFramework) -> MC
         from .tinyagent import TinyAgentMCPServerSse
 
         return TinyAgentMCPServerSse(mcp_tool=mcp_tool)
+    if agent_framework is AgentFramework.MINION:
+        from .minion import MinionMCPServerSse
+
+        return MinionMCPServerSse(mcp_tool=mcp_tool)
+    if agent_framework is AgentFramework.EXTERNAL_MINION_AGENT:
+        from .minion import MinionMCPServerSse
+
+        return MinionMCPServerSse(mcp_tool=mcp_tool)
     assert_never(agent_framework)
 
 
@@ -124,6 +140,14 @@ def _get_streamablehttp_mcp_server(
         from .tinyagent import TinyAgentMCPServerStreamableHttp
 
         return TinyAgentMCPServerStreamableHttp(mcp_tool=mcp_tool)
+    if agent_framework is AgentFramework.MINION:
+        from .minion import MinionMCPServerStreamableHttp
+
+        return MinionMCPServerStreamableHttp(mcp_tool=mcp_tool)
+    if agent_framework is AgentFramework.EXTERNAL_MINION_AGENT:
+        from .minion import MinionMCPServerStreamableHttp
+
+        return MinionMCPServerStreamableHttp(mcp_tool=mcp_tool)
     assert_never(agent_framework)
 
 

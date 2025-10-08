@@ -13,6 +13,8 @@ class AgentFramework(StrEnum):
     AGNO = auto()
     SMOLAGENTS = auto()
     TINYAGENT = auto()
+    MINION = auto()
+    EXTERNAL_MINION_AGENT = auto()
 
     @classmethod
     def from_string(cls, value: str | Self) -> Self:

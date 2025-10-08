@@ -50,4 +50,14 @@ def _get_instrumentor_by_framework(framework: AgentFramework) -> _Instrumentor:
 
         return _TinyAgentInstrumentor()
 
+    if framework is AgentFramework.MINION:
+        from .minion import _MinionInstrumentor
+
+        return _MinionInstrumentor()
+
+    if framework is AgentFramework.EXTERNAL_MINION_AGENT:
+        from .minion import _MinionInstrumentor
+
+        return _MinionInstrumentor()
+
     assert_never(framework)
