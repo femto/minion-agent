@@ -95,10 +95,7 @@ class MinionAgent(ABC):
 
             return TinyAgent
 
-        if framework is AgentFramework.MINION:
-            from minion_agent.frameworks.minion import MinionBrainAgent
 
-            return MinionBrainAgent
 
         if framework is AgentFramework.EXTERNAL_MINION_AGENT:
             from minion_agent.frameworks.minion import ExternalMinionAgent

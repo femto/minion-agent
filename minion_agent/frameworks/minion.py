@@ -27,8 +27,28 @@ except ImportError as e:
 if TYPE_CHECKING:
     from minion.main.brain import Brain as MinionBrain
 
-DEFAULT_AGENT_TYPE = ExternalCodeAgent
+DEFAULT_AGENT_TYPE = Brain
 DEFAULT_MODEL_TYPE = "gpt-4o"
+
+
+class SurrogateModel:
+    """Surrogate model class for external minion agent.
+    
+    This is a placeholder model class that doesn't actually implement any LLM functionality.
+    The real model is created and managed by the external minion framework.
+    """
+    
+    def __init__(self, *args, **kwargs):
+        # Accept any arguments but don't do anything with them
+        # The real model configuration is handled by _get_model method
+        pass
+    
+    def __call__(self, *args, **kwargs):
+        raise NotImplementedError("SurrogateModel is a placeholder. Real model is handled by external minion framework.")
+    
+    def complete(self, *args, **kwargs):
+        raise NotImplementedError("SurrogateModel is a placeholder. Real model is handled by external minion framework.")
+
 
 class ExternalMinionAgent(MinionAgent):
     """External minion framework agent implementation using code_agent or tool_calling_agent."""
@@ -48,27 +68,31 @@ class ExternalMinionAgent(MinionAgent):
 
     def _get_model(self, agent_config: AgentConfig) -> Any:
         """Get the model configuration for an external minion agent."""
-        model_id = agent_config.model_id or DEFAULT_MODEL_TYPE
+        # Reference implementation: llm_config = config.models.get(model)
+        # llm = create_llm_provider(llm_config)
+        # we don't use agent_config.model_type (SurrogateModel)
+        model_args = agent_config.model_args or {}
+        # Use model from model_args first, then model_id, then default
+        model = model_args.get("model") or agent_config.model_id or "gpt-4o-mini"
         
         # Try to get model config from minion's config first
         try:
-            llm_config = minion_config.models.get(model_id)
+            llm_config = minion_config.models.get(model)
         except:
             llm_config = None
             
         if not llm_config:
             # Create a custom config using agent_config model_args
-            model_args = agent_config.model_args or {}
             llm_config = {
                 "provider": "azure_openai",
-                "model": model_id,
+                "model": model,
                 "azure_endpoint": model_args.get("azure_endpoint"),
                 "api_key": model_args.get("api_key") or agent_config.api_key,
                 "api_version": model_args.get("api_version", "2024-02-15-preview"),
             }
             # Add other model_args but avoid duplicating the above keys
             for key, value in model_args.items():
-                if key not in ["azure_endpoint", "api_key", "api_version"]:
+                if key not in ["model", "azure_endpoint", "api_key", "api_version"]:
                     llm_config[key] = value
         
         return create_llm_provider(llm_config)
@@ -83,28 +107,17 @@ class ExternalMinionAgent(MinionAgent):
 
         # Get agent type from config, default to code_agent
         agent_args = self.config.agent_args or {}
-        agent_type = agent_args.pop('agent_type', 'code')
+        agent_type = self.config.agent_type or ExternalCodeAgent
         
         # Get model configuration
         llm_provider = self._get_model(self.config)
         
         self._main_agent_tools = tools
-        
-        if agent_type == 'code':
-            # Create Python environment for code agent
-            python_env = agent_args.pop('python_env', None) or LocalPythonEnv(verbose=False)
-            self._agent = ExternalCodeAgent(
-                llm=llm_provider,
-                python_env=python_env,
-                **agent_args
-            )
-        elif agent_type == 'tool_calling':
-            self._agent = ExternalToolCallingAgent(
-                llm=llm_provider,
-                **agent_args
-            )
-        else:
-            raise ValueError(f"Unsupported external agent type: {agent_type}. Use 'code' or 'tool_calling'.")
+
+        self._agent = agent_type(
+            llm=llm_provider,
+            **agent_args
+        )
 
         assert self._agent
 
@@ -113,8 +126,5 @@ class ExternalMinionAgent(MinionAgent):
             error_message = "Agent not loaded. Call load_agent() first."
             raise ValueError(error_message)
         
-        result = await self._agent.step(query=prompt, **kwargs)
-        # Extract the observation from the result tuple
-        if isinstance(result, tuple) and len(result) > 0:
-            return str(result[0])
-        return str(result)
+        result = await self._agent.run_async(task=prompt, **kwargs)
+        return result

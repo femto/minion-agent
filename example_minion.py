@@ -28,13 +28,12 @@ load_dotenv()
 
 from minion_agent import MinionAgent, AgentConfig, AgentFramework
 
-from smolagents import (
+from minion.agents import (
     CodeAgent,
     ToolCallingAgent,
-    DuckDuckGoSearchTool,
-    VisitWebpageTool,
-    AzureOpenAIServerModel, ActionStep,
+
 )
+from minion_agent.frameworks.minion import SurrogateModel
 
 # Set up screenshot callback for Playwright
 # def save_screenshot(memory_step: ActionStep, agent: CodeAgent) -> None:
@@ -73,6 +72,7 @@ agent_config = AgentConfig(
     model_args={"azure_endpoint": os.environ.get("AZURE_OPENAI_ENDPOINT"),
                 "api_key": os.environ.get("AZURE_OPENAI_API_KEY"),
                 "api_version": os.environ.get("OPENAI_API_VERSION"),
+                "model": "gpt-4o",  # Actual model to use in minion framework
                 },
     tools=[
         #minion_agent.tools.browser_tool.browser,
@@ -81,13 +81,7 @@ agent_config = AgentConfig(
             args=["-y", "@modelcontextprotocol/server-filesystem","/Users/femtozheng/workspace","/Users/femtozheng/python-project/minion-agent"]
         ),
     ],
-    model_type=AzureOpenAIServerModel,  # Updated to use our custom model
-    #model_type="gpt-4o",  # Updated to use our custom model
     agent_type=CodeAgent,
-    agent_args={"additional_authorized_imports":"*",
-                #"planning_interval":3
-#"step_callbacks":[save_screenshot]
-                }
 )
 # setup_logger(logging.DEBUG)
 async def main():
