@@ -119,6 +119,15 @@ class ExternalMinionAgent(MinionAgent):
             **agent_args
         )
 
+        # Call setup() method if it exists (required by external minion framework)
+        if hasattr(self._agent, 'setup'):
+            # Try async setup first, then sync if that fails
+            try:
+                await self._agent.setup()
+            except TypeError:
+                # If setup is not async, call it synchronously
+                self._agent.setup()
+
         assert self._agent
 
     async def _run_async(self, prompt: str, **kwargs: Any) -> str:
