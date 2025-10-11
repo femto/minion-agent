@@ -105,6 +105,26 @@ class ExternalMinionAgent(MinionAgent):
 
         tools, _ = await self._load_tools(self.config.tools or [])
 
+        #todo, support managed_agents
+        managed_agents_instanced = []
+        if self.managed_agents:
+            for managed_agent in self.managed_agents:
+                agent_type = managed_agent.agent_type or DEFAULT_AGENT_TYPE
+                managed_tools, _ = await self._load_tools(managed_agent.tools)
+                managed_agent_instance = agent_type(
+                    name=managed_agent.name,
+                    model=self._get_model(managed_agent),
+                    tools=managed_tools,
+                    verbosity_level=2,
+                    description=managed_agent.description
+                                or f"Use the agent: {managed_agent.name}",
+                )
+                if managed_agent.instructions:
+                    managed_agent_instance.prompt_templates["system_prompt"] = (
+                        managed_agent.instructions
+                    )
+                managed_agents_instanced.append(managed_agent_instance)
+
         # Get agent type from config, default to code_agent
         agent_args = self.config.agent_args or {}
         agent_type = self.config.agent_type or ExternalCodeAgent
@@ -116,6 +136,7 @@ class ExternalMinionAgent(MinionAgent):
 
         self._agent = agent_type(
             llm=llm_provider,
+            tools = tools,
             **agent_args
         )
 

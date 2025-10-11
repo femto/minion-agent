@@ -181,6 +181,9 @@ class MinionAgent(ABC):
         trace = self._exporter.pop_trace(run_id)
         trace.final_output = final_output
         return final_output
+    async def close(self):
+        for mcp_server in self._mcp_servers:
+            await mcp_server.close()
 
     def serve(self, serving_config: ServingConfig | None = None) -> None:
         """Serve this agent using the Agent2Agent Protocol (A2A).

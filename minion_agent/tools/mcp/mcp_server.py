@@ -28,6 +28,9 @@ class _MCPServerBase(BaseModel, ABC, Generic[T_co]):
 
     def model_post_init(self, context: Any) -> None:
         self._check_dependencies()
+    async def close(self) -> None:
+        if hasattr(self.mcp_connection,"close") and callable(self.mcp_connection.close):
+            await self.mcp_connection.close()
 
     @abstractmethod
     async def _setup_tools(

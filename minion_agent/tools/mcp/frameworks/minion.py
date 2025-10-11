@@ -11,27 +11,29 @@ from minion_agent.tools.mcp.mcp_server import _MCPServerBase
 
 mcp_available = False
 with suppress(ImportError):
-    from mcp import StdioServerParameters
-    from smolagents.mcp_client import MCPClient
-    from smolagents.tools import Tool as MinionTool  # Use smolagents tools for now
+    #from mcp import StdioServerParameters
 
+    from minion.tools.mcp.mcp_toolset import MCPToolset, StdioServerParameters,SSEServerParameters
+    from minion.tools.base_tool import BaseTool as MinionTool
     mcp_available = True
 
 
 class MinionMCPConnection(_MCPConnection["MinionTool"], ABC):
     """Base class for Minion MCP connections."""
 
-    _client: "MCPClient | None" = PrivateAttr(default=None)
-
+    #_client: "MCPClient | None" = PrivateAttr(default=None)
+    toolset: MCPToolset  = None
     @abstractmethod
     async def list_tools(self) -> list["MinionTool"]:
         """List tools from the MCP server."""
-        if not self._client:
+        if not self.toolset:
             msg = "Tool collection is not set up. Please call `list_tools` from a concrete class."
             raise ValueError(msg)
 
-        tools = self._client.get_tools()
+        tools = self.toolset.get_tools()
         return self._filter_tools(tools)  # type: ignore[return-value]
+    async def close(self) -> None:
+        await self.toolset.close()
 
 
 class MinionMCPStdioConnection(MinionMCPConnection):
@@ -44,12 +46,10 @@ class MinionMCPStdioConnection(MinionMCPConnection):
             args=list(self.mcp_tool.args),
             env=self.mcp_tool.env,
         )
-        adapter_kwargs = {}
-        if self.mcp_tool.client_session_timeout_seconds:
-            adapter_kwargs["connect_timeout"] = (
-                self.mcp_tool.client_session_timeout_seconds
-            )
-        self._client = MCPClient(server_parameters, adapter_kwargs=adapter_kwargs)
+        self.toolset = await MCPToolset.create(
+            connection_params=server_parameters,
+        )
+
         return await super().list_tools()
 
 

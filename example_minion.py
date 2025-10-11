@@ -75,7 +75,7 @@ agent_config = AgentConfig(
                 "model": "gpt-4o",  # Actual model to use in minion framework
                 },
     tools=[
-        #minion_agent.tools.browser_tool.browser,
+      #minion_agent.tools.browser_tool.browser,
        MCPStdio(
             command="npx",
             args=["-y", "@modelcontextprotocol/server-filesystem","/Users/femtozheng/workspace","/Users/femtozheng/python-project/minion-agent"]
@@ -92,7 +92,8 @@ async def main():
 
         # Run the agent with a question
         #result = await agent.run_async("search sam altman and export summary as markdown")
-        result = await agent.run_async("What are the latest developments in AI, find this information and export as markdown")
+        #result = await agent.run_async("What are the latest developments in AI, find this information and export as markdown")
+        result = await agent.run_async("list files in current dir")
         #result = await agent.run_async("打开微信公众号")
         #result = await agent.run_async("搜索最新的人工智能发展趋势，并且总结为markdown")
         #result = agent.run("go visit https://www.baidu.com and clone it")
@@ -107,9 +108,14 @@ async def main():
         #       "Fill the empty nodes with your own ideas. Be creative! Use your own words!"
         #       "I will tip you $100,000 if you write a good novel."
         #       "Since the novel is very long, you may need to divide it into subtasks.")
-        print("Agent's response:", result)
+        print("Agent's response:", result.content)
+        await agent.close()
+        print("done")
+
     except Exception as e:
         print(f"Error: {str(e)}")
+        import traceback
+        traceback.print_exc()
         # 如果需要调试
         # import litellm
         # litellm._turn_on_debug()

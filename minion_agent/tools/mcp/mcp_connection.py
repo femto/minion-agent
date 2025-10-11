@@ -28,6 +28,9 @@ class _MCPConnection(BaseModel, ABC, Generic[T]):
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
+    async def close(self) -> None:
+        pass
+
     @abstractmethod
     async def list_tools(self) -> list[T]:
         """List tools from the MCP server."""
