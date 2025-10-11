@@ -159,10 +159,10 @@ class AgentConfig(BaseModel):
     description: str | None = None
     """Description of the agent."""
 
-    name: str = "any_agent"
+    name: str = "minion_agent"
     """The name of the agent.
 
-    Defaults to `any_agent`.
+    Defaults to `minion_agent`.
     """
 
     instructions: str | None = None

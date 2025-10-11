@@ -1,15 +1,17 @@
-# mypy: disable-error-code="arg-type"
-from collections.abc import Mapping
+# mypy: disable-error-code="arg-type,attr-defined"
+from __future__ import annotations
+
+import json
 from datetime import timedelta
 from functools import cached_property
-from typing import Any
+from typing import TYPE_CHECKING, Any, Literal
 
-from litellm.cost_calculator import cost_per_token
 from opentelemetry.sdk.trace import ReadableSpan
 from pydantic import BaseModel, ConfigDict, Field
 
 from minion_agent.logging import logger
 
+from .attributes import GenAI
 from .otel_types import (
     AttributeValue,
     Event,
@@ -20,12 +22,20 @@ from .otel_types import (
     Status,
 )
 
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+    from opentelemetry.trace import Span
+
 
 class TokenInfo(BaseModel):
     """Token Count information."""
 
     input_tokens: int
+    """Number of input tokens."""
+
     output_tokens: int
+    """Number of output tokens."""
 
     @property
     def total_tokens(self) -> int:
@@ -39,7 +49,10 @@ class CostInfo(BaseModel):
     """Cost information."""
 
     input_cost: float
+    "Cost associated to the input tokens."
+
     output_cost: float
+    """Cost associated to the output tokens."""
 
     @property
     def total_cost(self) -> float:
@@ -49,31 +62,13 @@ class CostInfo(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
-def compute_cost_info(
-    attributes: Mapping[str, AttributeValue],
-) -> CostInfo | None:
-    """Use litellm to compute cost."""
-    if not any(
-        key in attributes
-        for key in ["gen_ai.usage.input_tokens", "gen_ai.usage.output_tokens"]
-    ):
-        return None
+class AgentMessage(BaseModel):
+    """A message that can be exported to JSON or printed to the console."""
 
-    new_info: dict[str, float] = {}
-    try:
-        cost_prompt, cost_completion = cost_per_token(
-            model=str(attributes.get("gen_ai.request.model", "")),
-            prompt_tokens=int(attributes.get("gen_ai.usage.input_tokens", 0)),  # type: ignore[arg-type]
-            completion_tokens=int(attributes.get("gen_ai.usage.output_tokens", 0)),  # type: ignore[arg-type]
-        )
-        new_info["input_cost"] = cost_prompt
-        new_info["output_cost"] = cost_completion
-    except Exception as e:
-        msg = f"Error computing cost_per_token: {e}"
-        logger.warning(msg)
-        new_info["input_cost"] = 0.0
-        new_info["output_cost"] = 0.0
-    return CostInfo.model_validate(new_info)
+    role: Literal["user", "assistant", "system", "tool"]
+    content: str
+
+    model_config = ConfigDict(extra="forbid")
 
 
 class AgentSpan(BaseModel):
@@ -94,22 +89,20 @@ class AgentSpan(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=False)
 
     @classmethod
-    def from_readable_span(cls, readable_span: "ReadableSpan") -> "AgentSpan":
-        """Create an AgentSpan from a ReadableSpan."""
+    def from_otel(cls, otel_span: Span) -> AgentSpan:
+        """Create an AgentSpan from an OTEL Span."""
         return cls(
-            name=readable_span.name,
-            kind=SpanKind.from_otel(readable_span.kind),
-            parent=SpanContext.from_otel(readable_span.parent),
-            start_time=readable_span.start_time,
-            end_time=readable_span.end_time,
-            status=Status.from_otel(readable_span.status),
-            context=SpanContext.from_otel(readable_span.context),
-            attributes=dict(readable_span.attributes)
-            if readable_span.attributes
-            else {},
-            links=[Link.from_otel(link) for link in readable_span.links],
-            events=[Event.from_otel(event) for event in readable_span.events],
-            resource=Resource.from_otel(readable_span.resource),
+            name=otel_span.name,
+            kind=SpanKind.from_otel(otel_span.kind),
+            parent=SpanContext.from_otel(otel_span.parent),
+            start_time=otel_span.start_time,
+            end_time=otel_span.end_time,
+            status=Status.from_otel(otel_span.status),
+            context=SpanContext.from_otel(otel_span.context),
+            attributes=dict(otel_span.attributes) if otel_span.attributes else {},
+            links=[Link.from_otel(link) for link in otel_span.links],
+            events=[Event.from_otel(event) for event in otel_span.events],
+            resource=Resource.from_otel(otel_span.resource),
         )
 
     def to_readable_span(self) -> ReadableSpan:
@@ -128,14 +121,6 @@ class AgentSpan(BaseModel):
             resource=self.resource,
         )
 
-    def add_cost_info(self) -> None:
-        """Extend attributes with `TokenUseAndCost`."""
-        cost_info = compute_cost_info(self.attributes)
-        if cost_info:
-            self.set_attributes(
-                {f"gen_ai.usage.{k}": v for k, v in cost_info.model_dump().items()}
-            )
-
     def set_attributes(self, attributes: Mapping[str, AttributeValue]) -> None:
         """Set attributes for the span."""
         for key, value in attributes.items():
@@ -145,15 +130,58 @@ class AgentSpan(BaseModel):
 
     def is_agent_invocation(self) -> bool:
         """Check whether this span is an agent invocation (the very first span)."""
-        return self.attributes.get("gen_ai.operation.name") == "invoke_agent"
+        return self.attributes.get(GenAI.OPERATION_NAME) == "invoke_agent"
 
     def is_llm_call(self) -> bool:
         """Check whether this span is a call to an LLM."""
-        return self.attributes.get("gen_ai.operation.name") == "call_llm"
+        return self.attributes.get(GenAI.OPERATION_NAME) == "call_llm"
 
     def is_tool_execution(self) -> bool:
         """Check whether this span is an execution of a tool."""
-        return self.attributes.get("gen_ai.operation.name") == "execute_tool"
+        return self.attributes.get(GenAI.OPERATION_NAME) == "execute_tool"
+
+    def get_input_messages(self) -> list[AgentMessage] | None:
+        """Extract input messages from an LLM call span.
+
+        Returns:
+            List of message dicts with 'role' and 'content' keys, or None if not available.
+
+        """
+        if not self.is_llm_call():
+            msg = "Span is not an LLM call"
+            raise ValueError(msg)
+
+        messages_json = self.attributes.get(GenAI.INPUT_MESSAGES)
+        if not messages_json:
+            return None
+
+        try:
+            parsed_messages = json.loads(messages_json)
+        except (json.JSONDecodeError, TypeError) as e:
+            msg = "Failed to parse input messages from span"
+            logger.error(msg)
+            raise ValueError(msg) from e
+        if not isinstance(parsed_messages, list):
+            msg = "Input messages are not a list of messages"
+            raise ValueError(msg)
+        return [AgentMessage.model_validate(msg) for msg in parsed_messages]
+
+    def get_output_content(self) -> str | None:
+        """Extract output content from an LLM call or tool execution span.
+
+        Returns:
+            The output content as a string, or None if not available.
+
+        """
+        if not self.is_llm_call() and not self.is_tool_execution():
+            msg = "Span is not an LLM call or tool execution"
+            raise ValueError(msg)
+
+        output = self.attributes.get(GenAI.OUTPUT)
+        if not output:
+            logger.debug("No output found in span")
+            return None
+        return str(output)
 
 
 class AgentTrace(BaseModel):
@@ -163,28 +191,83 @@ class AgentTrace(BaseModel):
     """A list of [`AgentSpan`][minion_agent.tracing.agent_trace.AgentSpan] that form the trace.
     """
 
-    final_output: str | None = None
+    final_output: str | dict[str, Any] | BaseModel | None = Field(default=None)
     """Contains the final output message returned by the agent.
     """
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    def _invalidate_usage_and_cost_cache(self) -> None:
-        """Clear the cached usage_and_cost property if it exists."""
-        if "usage" in self.__dict__:
+    def _invalidate_tokens_and_cost_cache(self) -> None:
+        """Clear the cached tokens_and_cost property if it exists."""
+        if "tokens" in self.__dict__:
             del self.tokens
         if "cost" in self.__dict__:
             del self.cost
 
-    def add_span(self, span: AgentSpan) -> None:
-        """Add an AgentSpan to the trace and clear the usage_and_cost cache if present."""
+    def add_span(self, span: AgentSpan | Span) -> None:
+        """Add an AgentSpan to the trace and clear the tokens_and_cost cache if present."""
+        if not isinstance(span, AgentSpan):
+            span = AgentSpan.from_otel(span)
         self.spans.append(span)
-        self._invalidate_usage_and_cost_cache()
+        self._invalidate_tokens_and_cost_cache()
 
     def add_spans(self, spans: list[AgentSpan]) -> None:
-        """Add a list of AgentSpans to the trace and clear the usage_and_cost cache if present."""
+        """Add a list of AgentSpans to the trace and clear the tokens_and_cost cache if present."""
         self.spans.extend(spans)
-        self._invalidate_usage_and_cost_cache()
+        self._invalidate_tokens_and_cost_cache()
+
+    def spans_to_messages(self) -> list[AgentMessage]:
+        """Convert spans to standard message format.
+
+        Returns:
+            List of message dicts with 'role' and 'content' keys.
+
+        """
+        messages: list[AgentMessage] = []
+
+        # Process spans in chronological order (excluding the final invoke_agent span)
+        # Filter out any agent invocation spans
+        filtered_spans: list[AgentSpan] = []
+        for span in self.spans:
+            if not span.is_agent_invocation():
+                filtered_spans.append(span)
+
+        for span in filtered_spans:
+            if span.is_llm_call():
+                if input_messages := span.get_input_messages():
+                    for msg in input_messages:
+                        if not any(
+                            existing.role == msg.role
+                            and existing.content == msg.content
+                            for existing in messages
+                        ):
+                            messages.append(msg)
+
+                if output_content := span.get_output_content():
+                    # Avoid duplicate assistant messages
+                    if not (
+                        messages
+                        and messages[-1].role == "assistant"
+                        and messages[-1].content == output_content
+                    ):
+                        messages.append(
+                            AgentMessage(role="assistant", content=output_content)
+                        )
+
+            elif span.is_tool_execution():
+                # For tool executions, include the result in the conversation
+                output_content = span.get_output_content()
+                if output_content:
+                    tool_name = span.attributes[GenAI.TOOL_NAME]
+                    tool_args = span.attributes.get(GenAI.TOOL_ARGS, "{}")
+                    messages.append(
+                        AgentMessage(
+                            role="assistant",
+                            content=f"[Tool {tool_name} executed: {output_content} with args: {tool_args}]",
+                        )
+                    )
+
+        return messages
 
     @property
     def duration(self) -> timedelta:
@@ -212,24 +295,22 @@ class AgentTrace(BaseModel):
 
     @cached_property
     def tokens(self) -> TokenInfo:
-        """The current total token count for this trace. Cached after first computation."""
+        """The [`TokenInfo`][minion_agent.tracing.agent_trace.TokenInfo] for this trace. Cached after first computation."""
         sum_input_tokens = 0
         sum_output_tokens = 0
         for span in self.spans:
             if span.is_llm_call():
-                sum_input_tokens += span.attributes.get("gen_ai.usage.input_tokens", 0)
-                sum_output_tokens += span.attributes.get(
-                    "gen_ai.usage.output_tokens", 0
-                )
+                sum_input_tokens += span.attributes.get(GenAI.USAGE_INPUT_TOKENS, 0)
+                sum_output_tokens += span.attributes.get(GenAI.USAGE_OUTPUT_TOKENS, 0)
         return TokenInfo(input_tokens=sum_input_tokens, output_tokens=sum_output_tokens)
 
     @cached_property
     def cost(self) -> CostInfo:
-        """The current total cost for this trace. Cached after first computation."""
-        sum_input_cost = 0
-        sum_output_cost = 0
+        """The [`CostInfo`][minion_agent.tracing.agent_trace.CostInfo] for this trace. Cached after first computation."""
+        sum_input_cost = 0.0
+        sum_output_cost = 0.0
         for span in self.spans:
             if span.is_llm_call():
-                sum_input_cost += span.attributes.get("gen_ai.usage.input_cost", 0)
-                sum_output_cost += span.attributes.get("gen_ai.usage.output_cost", 0)
+                sum_input_cost += span.attributes.get(GenAI.USAGE_INPUT_COST, 0)
+                sum_output_cost += span.attributes.get(GenAI.USAGE_OUTPUT_COST, 0)
         return CostInfo(input_cost=sum_input_cost, output_cost=sum_output_cost)

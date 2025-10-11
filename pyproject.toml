@@ -7,6 +7,7 @@ authors = [
 ]
 dependencies = [
     "smolagents>=0.0.1",
+    "opentelemetry-sdk",
     "python-dotenv>=1.0.0",
     "browser-use>=0.0.1",
     "loguru>=0.0.1",

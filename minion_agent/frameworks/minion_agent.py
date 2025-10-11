@@ -1,34 +1,66 @@
 from __future__ import annotations
 
 import asyncio
+import builtins
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any, assert_never
-from uuid import uuid4
+from typing import TYPE_CHECKING, Any, assert_never, overload
 
-from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+from minion_agent.utils.aio import run_async_in_sync
+from opentelemetry import trace as otel_trace
 
+from minion_agent.callbacks.context import Context
+from minion_agent.callbacks.wrappers import (
+    _get_wrapper_by_framework,
+)
 from minion_agent.config import (
     AgentConfig,
     AgentFramework,
-    ServingConfig,
     Tool,
-    TracingConfig,
 )
 from minion_agent.tools.wrappers import _wrap_tools
-from minion_agent.tracing.exporter import _MinionAgentExporter
-from minion_agent.tracing.instrumentation import (
-    _get_instrumentor_by_framework,
-    _Instrumentor,
-)
-from minion_agent.tracing.trace_provider import TRACE_PROVIDER
+from minion_agent.tracing.agent_trace import AgentTrace
+from minion_agent.tracing.attributes import MinionAgentAttributes, GenAI
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-    import uvicorn
+    from opentelemetry.trace import Tracer
+    from pydantic import BaseModel
 
-    from minion_agent.tools.mcp.mcp_server import _MCPServerBase
-    from minion_agent.tracing.agent_trace import AgentTrace
+    from minion_agent.serving import A2AServingConfig, MCPServingConfig, ServerHandle
+    from minion_agent.tools.mcp.mcp_client import MCPClient
+
+
+INSIDE_NOTEBOOK = hasattr(builtins, "__IPYTHON__")
+
+
+class AgentRunError(Exception):
+    """Error that wraps underlying framework specific errors and carries spans."""
+
+    _trace: AgentTrace
+    _original_exception: Exception
+
+    def __init__(self, trace: AgentTrace, original_exception: Exception):
+        self._trace = trace
+        self._original_exception = original_exception
+        # Set the exception message to be the original exception's message
+        super().__init__(str(original_exception))
+
+    @property
+    def trace(self) -> AgentTrace:
+        return self._trace
+
+    @property
+    def original_exception(self) -> Exception:
+        return self._original_exception
+
+    def __str__(self) -> str:
+        """Return the string representation of the original exception."""
+        return str(self._original_exception)
+
+    def __repr__(self) -> str:
+        """Return the detailed representation of the AgentRunError."""
+        return f"AgentRunError({self._original_exception!r})"
 
 
 class MinionAgent(ABC):
@@ -37,22 +69,20 @@ class MinionAgent(ABC):
     This provides a unified interface for different agent frameworks.
     """
 
-    def __init__(
-        self,
-        config: AgentConfig,
-        managed_agents: Sequence[AgentConfig] | None = None,
-        tracing: TracingConfig | None = None,
-    ):
+    def __init__(self, config: AgentConfig,managed_agents: list[AgentConfig] | None = None,
+        tracing: "TracingConfig" | None = None):
         self.config = config
-        self.managed_agents = managed_agents
 
-        self._mcp_servers: list[_MCPServerBase[Any]] = []
-        self._main_agent_tools: list[Any] = []
+        self._mcp_clients: list[MCPClient] = []
+        self._tools: list[Any] = []
 
-        # Tracing is enabled by default
-        self._tracing_config: TracingConfig = tracing or TracingConfig()
-        self._instrumentor: _Instrumentor | None = None
-        self._setup_tracing()
+        self._add_span_callbacks()
+        self._wrapper = _get_wrapper_by_framework(self.framework)
+
+        self._tracer: Tracer = otel_trace.get_tracer("minion_agent")
+
+        self._lock = asyncio.Lock()
+        self._callback_contexts: dict[int, Context] = {}
 
     @staticmethod
     def _get_agent_type_by_framework(
@@ -94,9 +124,6 @@ class MinionAgent(ABC):
             from minion_agent.frameworks.tinyagent import TinyAgent
 
             return TinyAgent
-
-
-
         if framework is AgentFramework.EXTERNAL_MINION_AGENT:
             from minion_agent.frameworks.minion import ExternalMinionAgent
 
@@ -109,17 +136,14 @@ class MinionAgent(ABC):
         cls,
         agent_framework: AgentFramework | str,
         agent_config: AgentConfig,
-        managed_agents: list[AgentConfig] | None = None,
-        tracing: TracingConfig | None = None,
     ) -> MinionAgent:
         """Create an agent using the given framework and config."""
-        return asyncio.get_event_loop().run_until_complete(
+        return run_async_in_sync(
             cls.create_async(
                 agent_framework=agent_framework,
                 agent_config=agent_config,
-                managed_agents=managed_agents,
-                tracing=tracing,
-            )
+            ),
+            allow_running_loop=INSIDE_NOTEBOOK,
         )
 
     @classmethod
@@ -127,119 +151,232 @@ class MinionAgent(ABC):
         cls,
         agent_framework: AgentFramework | str,
         agent_config: AgentConfig,
-        managed_agents: list[AgentConfig] | None = None,
-        tracing: TracingConfig | None = None,
     ) -> MinionAgent:
         """Create an agent using the given framework and config."""
         agent_cls = cls._get_agent_type_by_framework(agent_framework)
-        agent = agent_cls(agent_config, managed_agents=managed_agents, tracing=tracing)
+        agent = agent_cls(agent_config)
         await agent._load_agent()
         return agent
 
-    async def _load_tools(
-        self, tools: Sequence[Tool]
-    ) -> tuple[list[Any], list[_MCPServerBase[Any]]]:
-        tools, mcp_servers = await _wrap_tools(tools, self.framework)
+    async def _load_tools(self, tools: Sequence[Tool]) -> list[Any]:
+        tools, mcp_clients = await _wrap_tools(tools, self.framework)
         # Add to agent so that it doesn't get garbage collected
-        self._mcp_servers.extend(mcp_servers)
-        for mcp_server in mcp_servers:
-            tools.extend(mcp_server.tools)
-        return tools, mcp_servers
-
-    def _setup_tracing(self) -> None:
-        """Initialize the tracing for the agent."""
-        self._trace_provider = TRACE_PROVIDER
-        self._tracer = self._trace_provider.get_tracer("minion_agent")
-        self._exporter = _MinionAgentExporter(self._tracing_config)
-        self._trace_provider.add_span_processor(SimpleSpanProcessor(self._exporter))
-        self._instrumentor = _get_instrumentor_by_framework(self.framework)
-        self._instrumentor.instrument(tracer=self._tracer)
+        self._mcp_clients.extend(mcp_clients)
+        return tools
 
     def run(self, prompt: str, **kwargs: Any) -> AgentTrace:
         """Run the agent with the given prompt."""
-        return asyncio.get_event_loop().run_until_complete(
-            self.run_async(prompt, **kwargs)
+        return run_async_in_sync(
+            self.run_async(prompt, **kwargs), allow_running_loop=INSIDE_NOTEBOOK
         )
 
     async def run_async(self, prompt: str, **kwargs: Any) -> AgentTrace:
-        """Run the agent asynchronously with the given prompt."""
-        run_id = str(uuid4())
-        with self._tracer.start_as_current_span(
-            f"invoke_agent [{self.config.name}]"
-        ) as invoke_span:
-            invoke_span.set_attributes(
-                {
-                    "gen_ai.operation.name": "invoke_agent",
-                    "gen_ai.agent.name": self.config.name,
-                    "gen_ai.agent.description": self.config.description
-                    or "No description.",
-                    "gen_ai.request.model": self.config.model_id,
-                    "gen_ai.request.id": run_id,
-                }
-            )
-            final_output = await self._run_async(prompt, **kwargs)
-        trace = self._exporter.pop_trace(run_id)
-        trace.final_output = final_output
-        return final_output
-    async def close(self):
-        for mcp_server in self._mcp_servers:
-            await mcp_server.close()
-
-    def serve(self, serving_config: ServingConfig | None = None) -> None:
-        """Serve this agent using the Agent2Agent Protocol (A2A).
+        """Run the agent asynchronously with the given prompt.
 
         Args:
-            serving_config: See [ServingConfig][minion_agent.config.ServingConfig].
+            prompt: The user prompt to be passed to the agent.
 
-        Raises:
-            ImportError: If the `serving` dependencies are not installed.
+            kwargs: Will be passed to the underlying runner used
+                by the framework.
+
+        Returns:
+            The `AgentTrace` containing information about the
+                steps taken by the agent.
 
         """
-        from minion_agent.serving import _get_a2a_app, serve_a2a
+        trace = AgentTrace()
+        trace_id: int
 
-        if serving_config is None:
-            serving_config = ServingConfig()
-        app = _get_a2a_app(self, serving_config=serving_config)
+        # This design is so that we only catch exceptions thrown by _run_async. All other exceptions will not be caught.
+        try:
+            with self._tracer.start_as_current_span(
+                f"invoke_agent [{self.config.name}]"
+            ) as invoke_span:
+                async with self._lock:
+                    trace_id = invoke_span.get_span_context().trace_id
+                    self._wrapper.callback_context[trace_id] = Context(
+                        current_span=invoke_span,
+                        trace=AgentTrace(),
+                        tracer=self._tracer,
+                        shared={},
+                    )
 
-        serve_a2a(
-            app,
-            host=serving_config.host,
-            port=serving_config.port,
-            log_level=serving_config.log_level,
+                    if len(self._wrapper.callback_context) == 1:
+                        # If there is more than 1 entry in `callback_context`, it means that the agent has
+                        # already being wrapped so we won't wrap it again.
+                        await self._wrapper.wrap(
+                            agent=self,  # type: ignore[arg-type]
+                        )
+
+                # Importing here to avoid circular import issues
+                from minion_agent import __version__ as _minion_agent_VERSION  # noqa: N812
+
+                invoke_span.set_attributes(
+                    {
+                        GenAI.OPERATION_NAME: "invoke_agent",
+                        GenAI.AGENT_NAME: self.config.name,
+                        GenAI.AGENT_DESCRIPTION: self.config.description
+                        or "No description.",
+                        GenAI.REQUEST_MODEL: self.config.model_id,
+                        MinionAgentAttributes.VERSION: _minion_agent_VERSION,
+                    }
+                )
+
+                context = self._wrapper.callback_context[trace_id]
+                for callback in self.config.callbacks:
+                    context = callback.before_agent_invocation(
+                        context, prompt, **kwargs
+                    )
+
+                final_output = await self._run_async(prompt, **kwargs)
+
+        except Exception as e:
+            async with self._lock:
+                if len(self._wrapper.callback_context) == 1:
+                    await self._wrapper.unwrap(self)  # type: ignore[arg-type]
+                if wrapped_context := self._wrapper.callback_context.pop(
+                    trace_id, None
+                ):
+                    trace = wrapped_context.trace
+                    for callback in self.config.callbacks:
+                        wrapped_context = callback.after_agent_invocation(
+                            wrapped_context, prompt, **kwargs
+                        )
+
+            trace.add_span(invoke_span)
+            raise AgentRunError(trace, e) from e
+
+        async with self._lock:
+            if len(self._wrapper.callback_context) == 1:
+                await self._wrapper.unwrap(self)  # type: ignore[arg-type]
+            if wrapped_context := self._wrapper.callback_context.pop(trace_id, None):
+                trace = wrapped_context.trace
+                for callback in self.config.callbacks:
+                    wrapped_context = callback.after_agent_invocation(
+                        wrapped_context, prompt, **kwargs
+                    )
+
+        trace.add_span(invoke_span)
+        trace.final_output = final_output
+        return trace
+
+    async def _serve_a2a_async(
+        self, serving_config: A2AServingConfig | None
+    ) -> ServerHandle:
+        from minion_agent.serving import (
+            A2AServingConfig,
+            _get_a2a_app_async,
+            serve_a2a_async,
         )
 
-    async def serve_async(
-        self, serving_config: ServingConfig | None = None
-    ) -> tuple[asyncio.Task[Any], uvicorn.Server]:
-        """Serve this agent using the Agent2Agent Protocol (A2A).
-
-        Args:
-            serving_config: See [ServingConfig][minion_agent.config.ServingConfig].
-
-        Raises:
-            ImportError: If the `serving` dependencies are not installed.
-
-        """
-        from minion_agent.serving import _get_a2a_app, serve_a2a_async
-
         if serving_config is None:
-            serving_config = ServingConfig()
-        app = _get_a2a_app(self, serving_config=serving_config)
+            serving_config = A2AServingConfig()
+
+        app = await _get_a2a_app_async(self, serving_config=serving_config)
 
         return await serve_a2a_async(
             app,
             host=serving_config.host,
             port=serving_config.port,
+            endpoint=serving_config.endpoint,
             log_level=serving_config.log_level,
         )
+
+    async def _serve_mcp_async(self, serving_config: MCPServingConfig) -> ServerHandle:
+        from minion_agent.serving import serve_mcp_async
+
+        return await serve_mcp_async(
+            self,
+            host=serving_config.host,
+            port=serving_config.port,
+            endpoint=serving_config.endpoint,
+            log_level=serving_config.log_level,
+        )
+
+    @overload
+    async def serve_async(self, serving_config: MCPServingConfig) -> ServerHandle: ...
+
+    @overload
+    async def serve_async(
+        self, serving_config: A2AServingConfig | None = None
+    ) -> ServerHandle: ...
+
+    async def serve_async(
+        self, serving_config: MCPServingConfig | A2AServingConfig | None = None
+    ) -> ServerHandle:
+        """Serve this agent asynchronously using the protocol defined in the serving_config.
+
+        Args:
+            serving_config: Configuration for serving the agent. If None, uses default A2AServingConfig.
+                          Must be an instance of A2AServingConfig or MCPServingConfig.
+
+        Returns:
+            A ServerHandle instance that provides methods for managing the server lifecycle.
+
+        Raises:
+            ImportError: If the `a2a` dependencies are not installed and an `A2AServingConfig` is used.
+
+        Example:
+            ```
+            agent = await MinionAgent.create_async("tinyagent", AgentConfig(...))
+            config = MCPServingConfig(port=8080)
+            server_handle = await agent.serve_async(config)
+            try:
+                # Server is running
+                await asyncio.sleep(10)
+            finally:
+                await server_handle.shutdown()
+            ```
+
+        """
+        from minion_agent.serving import MCPServingConfig
+
+        if isinstance(serving_config, MCPServingConfig):
+            return await self._serve_mcp_async(serving_config)
+        return await self._serve_a2a_async(serving_config)
+
+    def _add_span_callbacks(self) -> None:
+        if self.config.callbacks is None:
+            return
+
+        from minion_agent.callbacks.span_end import SpanEndCallback
+        from minion_agent.callbacks.span_generation import (
+            SpanGeneration,
+            _get_span_generation_callback,
+        )
+
+        if not any(isinstance(c, SpanGeneration) for c in self.config.callbacks):
+            self.config.callbacks.insert(
+                0, _get_span_generation_callback(self.framework)
+            )
+        if not any(isinstance(c, SpanEndCallback) for c in self.config.callbacks):
+            self.config.callbacks.append(SpanEndCallback())
 
     @abstractmethod
     async def _load_agent(self) -> None:
         """Load the agent instance."""
 
     @abstractmethod
-    async def _run_async(self, prompt: str, **kwargs: Any) -> str:
+    async def _run_async(self, prompt: str, **kwargs: Any) -> str | BaseModel:
         """To be implemented by each framework."""
+
+    async def update_output_type_async(
+        self, output_type: type[BaseModel] | None
+    ) -> None:
+        """Update the output type of the agent in-place.
+
+        This method allows updating the agent's output type without recreating
+        the entire agent instance, which is more efficient than the current
+        approach of recreating the agent.
+
+        Args:
+            output_type: The new output type to use, or None to remove output type constraint
+
+        """
+        self.config.output_type = output_type
+
+        # If agent is already loaded, update its output handling
+        #self._setup_output_type(output_type)
 
     @property
     @abstractmethod
@@ -264,10 +401,3 @@ class MinionAgent(ABC):
         """
         msg = "Cannot access the 'agent' property of MinionAgent, if you need to use functionality that relies on the underlying agent framework, please file a Github Issue or we welcome a PR to add the functionality to the MinionAgent class"
         raise NotImplementedError(msg)
-
-    def exit(self) -> None:
-        """Exit the agent and clean up resources."""
-        if self._instrumentor is not None:
-            self._instrumentor.uninstrument()
-            self._instrumentor = None
-        self._mcp_servers = []  # drop references to mcp servers so that they get garbage collected

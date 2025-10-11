@@ -1,13 +1,11 @@
+import asyncio
 import inspect
-from collections.abc import Callable, MutableSequence, Sequence
+from collections.abc import Callable, Sequence
 from functools import wraps
 from typing import TYPE_CHECKING, Any, TypeVar
 
 from minion_agent.config import AgentFramework, MCPParams, Tool
-from minion_agent.tools import (
-    _get_mcp_server,
-    _MCPServerBase,
-)
+from minion_agent.tools.mcp import MCPClient, SmolagentsMCPClient
 
 if TYPE_CHECKING:
     from agents import Tool as AgentTool
@@ -15,6 +13,27 @@ if TYPE_CHECKING:
     from langchain_core.tools import BaseTool as LangchainTool
     from llama_index.core.tools import FunctionTool as LlamaIndexTool
     from smolagents import Tool as SmolagentsTool
+
+
+def _wrap_no_exception(tool: Any) -> Any:
+    @wraps(tool)
+    def wrapped_function(*args: Any, **kwargs: Any) -> Any:
+        try:
+            return tool(*args, **kwargs)
+        except Exception as e:
+            return f"Error calling tool: {e}"
+
+    @wraps(tool)
+    async def wrapped_coroutine(*args: Any, **kwargs: Any) -> Any:
+        try:
+            return await tool(*args, **kwargs)
+        except Exception as e:
+            return f"Error calling tool: {e}"
+
+    if asyncio.iscoroutinefunction(tool):
+        return wrapped_coroutine
+
+    return wrapped_function
 
 
 def _wrap_tool_openai(tool: "Tool | AgentTool") -> "AgentTool":
@@ -44,12 +63,7 @@ def _wrap_tool_smolagents(tool: "Tool | SmolagentsTool") -> "SmolagentsTool":
     if isinstance(tool, SmolagentsTool):
         return tool
 
-    # this wrapping needed until https://github.com/huggingface/smolagents/pull/1203 is merged and released
-    @wraps(tool)  # type: ignore[arg-type]
-    def wrapped_function(*args, **kwargs) -> Any:  # type: ignore[no-untyped-def]
-        return tool(*args, **kwargs)  # type: ignore[operator]
-
-    return smolagents_tool(wrapped_function)
+    return smolagents_tool(tool)  # type: ignore[arg-type]
 
 
 def _wrap_tool_llama_index(tool: "Tool | LlamaIndexTool") -> "LlamaIndexTool":
@@ -80,13 +94,6 @@ def _wrap_tool_tiny(tool: Tool) -> Tool:
     return tool
 
 
-def _wrap_tool_minion(tool: Tool) -> Tool:
-    """Wrap tool for Minion framework."""
-    # For now, we'll just return the tool as-is
-    # This can be extended later with specific Minion tool wrapping
-    return tool
-
-
 WRAPPERS: dict[AgentFramework, Callable[..., Any]] = {
     AgentFramework.GOOGLE: _wrap_tool_google,
     AgentFramework.OPENAI: _wrap_tool_openai,
@@ -95,8 +102,6 @@ WRAPPERS: dict[AgentFramework, Callable[..., Any]] = {
     AgentFramework.LLAMA_INDEX: _wrap_tool_llama_index,
     AgentFramework.AGNO: _wrap_tool_agno,
     AgentFramework.TINYAGENT: _wrap_tool_tiny,
-    AgentFramework.MINION: _wrap_tool_minion,
-    AgentFramework.EXTERNAL_MINION_AGENT: _wrap_tool_minion,
 }
 
 
@@ -131,25 +136,45 @@ T_co = TypeVar("T_co", covariant=True)
 async def _wrap_tools(
     tools: Sequence[T_co],
     agent_framework: AgentFramework,
-) -> tuple[list[T_co], list[_MCPServerBase[T_co]]]:
-    wrapper = WRAPPERS[agent_framework]
+) -> tuple[list[T_co], list[MCPClient]]:
+    framework_wrapper = WRAPPERS[agent_framework]
 
     wrapped_tools = list[T_co]()
-    mcp_servers: MutableSequence[_MCPServerBase[T_co]] = []
+    mcp_clients: list[MCPClient] = []
+
     for tool in tools:
-        # if it's MCPStdio or MCPSse, we need to wrap it in a server
+        # if it's MCPStdio or MCPSse, we need to wrap it in a client
         if isinstance(tool, MCPParams):
-            # MCP adapters are usually implemented as context managers.
-            # We wrap the server using `MCPServerBase` so the
-            # tools can be used as any other callable.
-            mcp_server = _get_mcp_server(tool, agent_framework)
-            await mcp_server._setup_tools()
-            mcp_servers.append(mcp_server)  # type: ignore[arg-type]
+            # Use SmolagentsMCPClient for smolagents framework, regular MCPClient for others
+            if agent_framework == AgentFramework.SMOLAGENTS:
+                mcp_client: MCPClient = SmolagentsMCPClient(
+                    config=tool, framework=agent_framework
+                )
+            else:
+                mcp_client = MCPClient(config=tool, framework=agent_framework)
+
+            await mcp_client.connect()
+
+            # Get tools as callables (universal format)
+            callable_tools = await mcp_client.list_tools()
+
+            # For smolagents, the tools are already SmolagentsTool objects, so we don't need to wrap them
+            if agent_framework == AgentFramework.SMOLAGENTS:
+                for callable_tool in callable_tools:
+                    wrapped_tools.append(callable_tool)  # type: ignore[arg-type]
+            else:
+                # Wrap each callable tool with the framework wrapper
+                for callable_tool in callable_tools:
+                    wrapped_tools.append(
+                        framework_wrapper(_wrap_no_exception(callable_tool))
+                    )
+
+            mcp_clients.append(mcp_client)
         elif callable(tool):
             verify_callable(tool)
-            wrapped_tools.append(wrapper(tool))
+            wrapped_tools.append(framework_wrapper(_wrap_no_exception(tool)))
         else:
             msg = f"Tool {tool} needs to be of type `MCPStdio` or `callable` but is {type(tool)}"
             raise ValueError(msg)
 
-    return wrapped_tools, mcp_servers  # type: ignore[return-value]
+    return wrapped_tools, mcp_clients
