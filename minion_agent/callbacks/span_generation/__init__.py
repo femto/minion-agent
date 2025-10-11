@@ -41,7 +41,7 @@ def _get_span_generation_callback(
     if framework is AgentFramework.OPENAI:
         return _OpenAIAgentsSpanGeneration()
 
-    if framework is AgentFramework.SMOLAGENTS:
+    if framework is AgentFramework.SMOLAGENTS or framework is AgentFramework.EXTERNAL_MINION_AGENT:
         return _SmolagentsSpanGeneration()
 
     if framework is AgentFramework.TINYAGENT:

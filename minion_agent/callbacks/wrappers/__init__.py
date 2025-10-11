@@ -11,6 +11,7 @@ from .llama_index import _LlamaIndexWrapper
 from .openai import _OpenAIAgentsWrapper
 from .smolagents import _SmolagentsWrapper
 from .tinyagent import _TinyAgentWrapper
+from .minion import _ExternalMinionAgentWrapper
 
 
 def _get_wrapper_by_framework(
@@ -44,5 +45,8 @@ def _get_wrapper_by_framework(
 
     if framework is AgentFramework.TINYAGENT:
         return _TinyAgentWrapper()
+
+    if framework is AgentFramework.EXTERNAL_MINION_AGENT:
+        return _ExternalMinionAgentWrapper()
 
     assert_never(framework)

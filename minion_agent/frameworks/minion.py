@@ -64,7 +64,7 @@ class ExternalMinionAgent(MinionAgent):
 
     @property
     def framework(self) -> AgentFramework:
-        return AgentFramework.MINION
+        return AgentFramework.EXTERNAL_MINION_AGENT
 
     def _get_model(self, agent_config: AgentConfig) -> Any:
         """Get the model configuration for an external minion agent."""

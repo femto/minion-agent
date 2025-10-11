@@ -92,7 +92,9 @@ def _wrap_tool_agno(tool: Tool) -> Tool:
 def _wrap_tool_tiny(tool: Tool) -> Tool:
     # Tiny lets you pass callables directly in as tools ❤️
     return tool
-
+def _wrap_tool_minion(tool: Tool) -> Tool:
+    # Minion lets you pass callables directly in as tools ❤️
+    return tool
 
 WRAPPERS: dict[AgentFramework, Callable[..., Any]] = {
     AgentFramework.GOOGLE: _wrap_tool_google,
@@ -102,6 +104,7 @@ WRAPPERS: dict[AgentFramework, Callable[..., Any]] = {
     AgentFramework.LLAMA_INDEX: _wrap_tool_llama_index,
     AgentFramework.AGNO: _wrap_tool_agno,
     AgentFramework.TINYAGENT: _wrap_tool_tiny,
+    AgentFramework.EXTERNAL_MINION_AGENT: _wrap_tool_minion,
 }
 
 

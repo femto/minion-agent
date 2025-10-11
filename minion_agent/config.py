@@ -5,6 +5,10 @@ from typing import Any, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from minion_agent.callbacks import get_default_callbacks
+from minion_agent.callbacks.base import Callback
+
+
 class AgentFramework(StrEnum):
     GOOGLE = auto()
     LANGCHAIN = auto()
@@ -13,7 +17,6 @@ class AgentFramework(StrEnum):
     AGNO = auto()
     SMOLAGENTS = auto()
     TINYAGENT = auto()
-    MINION = auto()
     EXTERNAL_MINION_AGENT = auto()
 
     @classmethod
@@ -174,7 +177,7 @@ class AgentConfig(BaseModel):
     See more info at [Tools](../agents/tools.md).
     """
 
-    #callbacks: list[Callback] = Field(default_factory=get_default_callbacks)
+    callbacks: list[Callback] = Field(default_factory=get_default_callbacks)
     """List of callbacks to use during agent invocation.
 
     See more info at [Callbacks](../agents/callbacks.md).
@@ -228,6 +231,7 @@ class AgentConfig(BaseModel):
 
     Using this parameter you can define a Pydantic model that will be returned by the agent run methods.
     """
+
 
 class TracingConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
