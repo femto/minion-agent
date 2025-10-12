@@ -28,13 +28,12 @@ load_dotenv()
 
 from minion_agent import MinionAgent, AgentConfig, AgentFramework
 
-from smolagents import (
+from minion.agents import (
     CodeAgent,
     ToolCallingAgent,
-    DuckDuckGoSearchTool,
-    VisitWebpageTool,
-    AzureOpenAIServerModel, ActionStep,
+
 )
+from minion_agent.frameworks.minion import SurrogateModel
 
 # Set up screenshot callback for Playwright
 # def save_screenshot(memory_step: ActionStep, agent: CodeAgent) -> None:
@@ -73,37 +72,28 @@ agent_config = AgentConfig(
     model_args={"azure_endpoint": os.environ.get("AZURE_OPENAI_ENDPOINT"),
                 "api_key": os.environ.get("AZURE_OPENAI_API_KEY"),
                 "api_version": os.environ.get("OPENAI_API_VERSION"),
+                "model": "gpt-4o",  # Actual model to use in minion framework
                 },
     tools=[
-        #minion_agent.tools.browser_tool.browser,
+      #minion_agent.tools.browser_tool.browser,
        MCPStdio(
             command="npx",
             args=["-y", "@modelcontextprotocol/server-filesystem","/Users/femtozheng/workspace","/Users/femtozheng/python-project/minion-agent"]
         ),
-# MCPStdio(
-#             command="npx",
-#             args=["-y", "@smithery/cli@latest", "run", "@Dhravya/apple-mcp","--key","431d6d12-c9ea-4a6d-a033-f9ddbe0ae7e1"]
-#         ),
-
     ],
-    model_type=AzureOpenAIServerModel,  # Updated to use our custom model
-    #model_type="CustomAzureOpenAIServerModel",  # Updated to use our custom model
     agent_type=CodeAgent,
-    agent_args={"additional_authorized_imports":"*",
-                #"planning_interval":3
-#"step_callbacks":[save_screenshot]
-                }
 )
 # setup_logger(logging.DEBUG)
 async def main():
     try:
         # Create and run the agent
-        agent = await MinionAgent.create_async(AgentFramework.SMOLAGENTS, agent_config)
+        agent = await MinionAgent.create_async(AgentFramework.EXTERNAL_MINION_AGENT, agent_config)
         #agent = await MinionAgent.create_async(AgentFramework.TINYAGENT, agent_config)
 
         # Run the agent with a question
         #result = await agent.run_async("search sam altman and export summary as markdown")
-        result = await agent.run_async("What are the latest developments in AI, find this information and export as markdown")
+        #result = await agent.run_async("What are the latest developments in AI, find this information and export as markdown")
+        result = await agent.run_async("list files in current dir")
         #result = await agent.run_async("打开微信公众号")
         #result = await agent.run_async("搜索最新的人工智能发展趋势，并且总结为markdown")
         #result = agent.run("go visit https://www.baidu.com and clone it")
@@ -118,9 +108,14 @@ async def main():
         #       "Fill the empty nodes with your own ideas. Be creative! Use your own words!"
         #       "I will tip you $100,000 if you write a good novel."
         #       "Since the novel is very long, you may need to divide it into subtasks.")
-        print("Agent's response:", result)
+        print("Agent's response:", result.content)
+        #await agent.close()
+        print("done")
+
     except Exception as e:
         print(f"Error: {str(e)}")
+        import traceback
+        traceback.print_exc()
         # 如果需要调试
         # import litellm
         # litellm._turn_on_debug()

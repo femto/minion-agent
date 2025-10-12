@@ -20,13 +20,13 @@ class _ExternalMinionAgentWrapper:
         self._original_tools: Any | None = None
 
     async def wrap(self, agent: SmolagentsAgent) -> None:
-        self._original_llm_call = agent._agent.model.generate
+        self._original_llm_call = agent._agent.brain.llm.generate_stream
 
         def wrap_generate(*args, **kwargs):
             context = self.callback_context[
                 get_current_span().get_span_context().trace_id
             ]
-            context.shared["model_id"] = str(agent._agent.model.model_id)
+            context.shared["model_id"] = str(agent._agent.brain.llm.config.model)
 
             for callback in agent.config.callbacks:
                 context = callback.before_llm_call(context, *args, **kwargs)
@@ -79,6 +79,6 @@ class _ExternalMinionAgentWrapper:
 
     async def unwrap(self, agent: SmolagentsAgent) -> None:
         if self._original_llm_call is not None:
-            agent._agent.model.generate = self._original_llm_call
+            agent._agent.brain.llm.generate_stream = self._original_llm_call
         if self._original_tools is not None:
             agent._agent.tools = self._original_tools

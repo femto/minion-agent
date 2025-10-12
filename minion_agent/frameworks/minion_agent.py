@@ -83,6 +83,8 @@ class MinionAgent(ABC):
 
         self._lock = asyncio.Lock()
         self._callback_contexts: dict[int, Context] = {}
+        self.managed_agents =  managed_agents or []
+
 
     @staticmethod
     def _get_agent_type_by_framework(
@@ -162,7 +164,7 @@ class MinionAgent(ABC):
         tools, mcp_clients = await _wrap_tools(tools, self.framework)
         # Add to agent so that it doesn't get garbage collected
         self._mcp_clients.extend(mcp_clients)
-        return tools
+        return tools,mcp_clients
 
     def run(self, prompt: str, **kwargs: Any) -> AgentTrace:
         """Run the agent with the given prompt."""
