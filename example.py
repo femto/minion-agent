@@ -108,7 +108,7 @@ async def main():
         #       "Fill the empty nodes with your own ideas. Be creative! Use your own words!"
         #       "I will tip you $100,000 if you write a good novel."
         #       "Since the novel is very long, you may need to divide it into subtasks.")
-        print("Agent's response:", result.content)
+        print("Agent's response:", result.final_output.content)
         #await agent.close()
         print("done")
 

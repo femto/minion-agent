@@ -38,7 +38,7 @@ class _ExternalMinionAgentWrapper:
 
             return output
 
-        agent._agent.model.generate = wrap_generate
+        agent._agent.brain.llm.generate_stream = wrap_generate
 
         def wrapped_tool_execution(original_tool, original_call, *args, **kwargs):
             context = self.callback_context[
@@ -69,12 +69,12 @@ class _ExternalMinionAgentWrapper:
                 )
 
         self._original_tools = deepcopy(agent._agent.tools)
-        wrapped_tools = {}
-        for key, tool in agent._agent.tools.items():
+        wrapped_tools = []
+        for _, tool in enumerate(agent._agent.tools):
             original_forward = tool.forward
             wrapped = WrappedToolCall(tool, original_forward)
             tool.forward = wrapped.forward
-            wrapped_tools[key] = tool
+            wrapped_tools.append(tool)
         agent._agent.tools = wrapped_tools
 
     async def unwrap(self, agent: SmolagentsAgent) -> None:
