@@ -24,7 +24,6 @@ async def main():
     # Create agent configuration
     config = AgentConfig(
         name="browser-agent",
-        agent_type=CodeAgent,
         model_type=browser_use.ChatAzureOpenAI,
         model_id=azure_deployment,
         model_args={
