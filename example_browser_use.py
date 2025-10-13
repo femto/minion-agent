@@ -1,5 +1,7 @@
 import os
 import asyncio
+
+import browser_use
 from dotenv import load_dotenv
 from minion_agent.config import AgentConfig, MCPStdio
 from minion_agent.frameworks.minion_agent import MinionAgent
@@ -22,15 +24,15 @@ async def main():
     # Create agent configuration
     config = AgentConfig(
         name="browser-agent",
-        model_type=AzureOpenAIServerModel,
         agent_type=CodeAgent,
+        model_type=browser_use.ChatAzureOpenAI,
         model_id=azure_deployment,
         model_args={
-            "azure_deployment": azure_deployment,
-            "api_version": api_version,
+            # "azure_deployment": azure_deployment,
+            # "api_version": api_version,
         },
         tools=[
-            minion_agent.tools.browser_tool.browser,
+            #minion_agent.tools.browser_tool.browser,
             MCPStdio(
                 command="npx",
                 args=["-y", "@modelcontextprotocol/server-filesystem","/Users/femtozheng/workspace","/Users/femtozheng/python-project/minion-agent"]

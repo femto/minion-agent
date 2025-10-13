@@ -6,18 +6,17 @@ from pydantic import SecretStr
 
 from minion_agent.config import AgentFramework, AgentConfig
 from minion_agent.frameworks.minion_agent import MinionAgent
-from minion_agent.tools.wrappers import import_and_wrap_tools
 
 try:
     import browser_use
     from browser_use import Agent
-    from browser_use import Agent, Browser, BrowserConfig
+    from browser_use import Agent, Browser,  ChatOpenAI
 
     browser_use_available = True
 except ImportError:
     browser_use_available = None
 
-DEFAULT_MODEL_CLASS = "langchain_openai.ChatOpenAI"
+DEFAULT_MODEL_CLASS = ChatOpenAI
 
 class BrowserUseAgent(MinionAgent):
     """Browser-use agent implementation that handles both loading and running."""
@@ -44,31 +43,27 @@ class BrowserUseAgent(MinionAgent):
 
     def _get_model(self, agent_config: AgentConfig):
         """Get the model configuration for a LangChain agent."""
-        if not agent_config.model_type:
-            agent_config.model_type = DEFAULT_MODEL_CLASS
-        module, class_name = agent_config.model_type.split(".")
-        model_type = getattr(importlib.import_module(module), class_name)
 
-        return model_type(model=agent_config.model_id, **agent_config.model_args or {})
+        model_type = agent_config.model_type or DEFAULT_MODEL_CLASS
+        model_args = agent_config.model_args or {}
+        kwargs = {
+            "model": agent_config.model_id,
+        }
+        return model_type(**kwargs)
 
     async def _load_agent(self) -> None:
         """Load the Browser-use agent with the given configuration."""
         if not self.config.tools:
             self.config.tools = []  # Browser-use has built-in browser automation tools
 
-        tools, mcp_servers = await import_and_wrap_tools(
-            self.config.tools, agent_framework=AgentFramework.BROWSER_USE
+        tools, mcp_clients = await self._load_tools(
+            self.config.tools or []
         )
-        self._mcp_servers = mcp_servers
+        self._mcp_servers = mcp_clients
 
         # Initialize the browser-use Agent
         browser = Browser(
-            config=BrowserConfig(
-                # Specify the path to your Chrome executable
-                #browser_binary_path='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',  # macOS path
-                # For Windows, typically: 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe'
-                # For Linux, typically: '/usr/bin/google-chrome'
-            )
+
         )
 
         self._agent = Agent(
@@ -82,7 +77,7 @@ class BrowserUseAgent(MinionAgent):
         # Update the agent's task with the new prompt
         self._agent.task = prompt
         self._agent._message_manager.task = prompt
-        self._agent._message_manager.state.history.messages[1].message.content = f'Your ultimate task is: """{prompt}""". If you achieved your ultimate task, stop everything and use the done action in the next step to complete the task. If not, continue as usual.'
+        #self._agent._message_manager.state.history
         result = await self._agent.run()
         return result
 
