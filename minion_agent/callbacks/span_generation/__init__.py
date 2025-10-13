@@ -12,6 +12,8 @@ from .openai import _OpenAIAgentsSpanGeneration
 from .smolagents import _SmolagentsSpanGeneration
 from .tinyagent import _TinyAgentSpanGeneration
 from .minion import _ExternalMinionAgentSpanGeneration
+from .deep_research import _DeepResearchSpanGeneration
+from .browser_use import _BrowserUseSpanGeneration
 
 SpanGeneration = (
     _AgnoSpanGeneration
@@ -22,6 +24,8 @@ SpanGeneration = (
     | _SmolagentsSpanGeneration
     | _TinyAgentSpanGeneration
     | _ExternalMinionAgentSpanGeneration
+    | _DeepResearchSpanGeneration
+    | _BrowserUseSpanGeneration
 )
 
 
@@ -48,7 +52,16 @@ def _get_span_generation_callback(
 
     if framework is AgentFramework.TINYAGENT:
         return _TinyAgentSpanGeneration()
+
+    if framework is AgentFramework.MINION:
+        return _ExternalMinionAgentSpanGeneration()
+
     if framework is AgentFramework.EXTERNAL_MINION_AGENT:
         return _ExternalMinionAgentSpanGeneration()
+
+    if framework is AgentFramework.DEEP_RESEARCH:
+        return _DeepResearchSpanGeneration()
+    if framework is AgentFramework.BROWSER_USE:
+        return _BrowserUseSpanGeneration()
 
     assert_never(framework)

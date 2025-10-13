@@ -125,10 +125,25 @@ class MinionAgent(ABC):
             from minion_agent.frameworks.tinyagent import TinyAgent
 
             return TinyAgent
+
+        if framework is AgentFramework.MINION:
+            from minion_agent.frameworks.minion import ExternalMinionAgent
+
+            return ExternalMinionAgent
+
         if framework is AgentFramework.EXTERNAL_MINION_AGENT:
             from minion_agent.frameworks.minion import ExternalMinionAgent
 
             return ExternalMinionAgent
+        if framework is AgentFramework.DEEP_RESEARCH:
+            from minion_agent.frameworks.deep_research import DeepResearchAgent
+
+            return DeepResearchAgent
+        if framework is AgentFramework.BROWSER_USE:
+            from minion_agent.frameworks.browser_use import BrowserUseAgent
+
+            return BrowserUseAgent
+
 
         assert_never(framework)
 

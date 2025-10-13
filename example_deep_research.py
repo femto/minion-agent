@@ -51,6 +51,13 @@ async def main():
             "answer_model": "azure/" + os.environ.get("AZURE_DEPLOYMENT_NAME")
         }
     )
+    research_agent = await MinionAgent.create_async(
+        AgentFramework.DEEP_RESEARCH,
+        research_agent_config,
+
+    )
+    result = await research_agent.run_async("Research The evolution of Indo-European languages, and generate a pdf out of it.")
+    result
 
     # Create the main agent with the research agent as a managed agent
     main_agent = await MinionAgent.create_async(

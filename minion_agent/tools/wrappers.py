@@ -105,6 +105,8 @@ WRAPPERS: dict[AgentFramework, Callable[..., Any]] = {
     AgentFramework.AGNO: _wrap_tool_agno,
     AgentFramework.TINYAGENT: _wrap_tool_tiny,
     AgentFramework.EXTERNAL_MINION_AGENT: _wrap_tool_minion,
+    AgentFramework.DEEP_RESEARCH: _wrap_tool_minion,
+    AgentFramework.BROWSER_USE: _wrap_tool_minion,
 }
 
 

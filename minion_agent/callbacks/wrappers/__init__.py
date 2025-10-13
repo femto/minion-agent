@@ -12,6 +12,8 @@ from .openai import _OpenAIAgentsWrapper
 from .smolagents import _SmolagentsWrapper
 from .tinyagent import _TinyAgentWrapper
 from .minion import _ExternalMinionAgentWrapper
+from .deep_research import _DeepResearchWrapper
+from .browser_use import _BrowserUseWrapper
 
 
 def _get_wrapper_by_framework(
@@ -24,6 +26,9 @@ def _get_wrapper_by_framework(
     | _OpenAIAgentsWrapper
     | _SmolagentsWrapper
     | _TinyAgentWrapper
+    | _ExternalMinionAgentWrapper
+    | _DeepResearchWrapper
+    | _BrowserUseWrapper
 ):
     if framework is AgentFramework.AGNO:
         return _AgnoWrapper()
@@ -46,7 +51,16 @@ def _get_wrapper_by_framework(
     if framework is AgentFramework.TINYAGENT:
         return _TinyAgentWrapper()
 
+    if framework is AgentFramework.MINION:
+        return _ExternalMinionAgentWrapper()
+
     if framework is AgentFramework.EXTERNAL_MINION_AGENT:
         return _ExternalMinionAgentWrapper()
+
+    if framework is AgentFramework.DEEP_RESEARCH:
+        return _DeepResearchWrapper()
+
+    if framework is AgentFramework.BROWSER_USE:
+        return _BrowserUseWrapper()
 
     assert_never(framework)

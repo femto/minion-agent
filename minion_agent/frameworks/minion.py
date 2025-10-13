@@ -59,7 +59,6 @@ class ExternalMinionAgent(MinionAgent):
         managed_agents: list[AgentConfig] | None = None,
     ):
         super().__init__(config, managed_agents)
-        self._agent: Any = None
 
     @property
     def framework(self) -> AgentFramework:

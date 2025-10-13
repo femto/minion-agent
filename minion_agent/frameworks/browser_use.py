@@ -27,6 +27,7 @@ class BrowserUseAgent(MinionAgent):
     def __init__(
         self, config: AgentConfig, managed_agents: Optional[list[AgentConfig]] = None
     ):
+        super().__init__(config, managed_agents)
         if not browser_use_available:
             raise ImportError(
                 "You need to `pip install 'minion-agent-x[browser_use]'` to use this agent"
@@ -36,6 +37,10 @@ class BrowserUseAgent(MinionAgent):
         self._agent = None
         self._agent_loaded = False
         self._mcp_servers = None
+
+    @property
+    def framework(self) -> AgentFramework:
+        return AgentFramework.BROWSER_USE
 
     def _get_model(self, agent_config: AgentConfig):
         """Get the model configuration for a LangChain agent."""
@@ -72,7 +77,7 @@ class BrowserUseAgent(MinionAgent):
             browser = browser,
         )
 
-    async def run_async(self, prompt: str) -> Any:
+    async def _run_async(self, prompt: str) -> Any:
         """Run the Browser-use agent with the given prompt."""
         # Update the agent's task with the new prompt
         self._agent.task = prompt

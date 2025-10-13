@@ -17,7 +17,9 @@ class AgentFramework(StrEnum):
     AGNO = auto()
     SMOLAGENTS = auto()
     TINYAGENT = auto()
+    MINION = auto()
     DEEP_RESEARCH = auto()
+    BROWSER_USE = auto()
     EXTERNAL_MINION_AGENT = auto()
 
     @classmethod

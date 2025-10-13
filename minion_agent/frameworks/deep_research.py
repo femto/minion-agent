@@ -4,7 +4,6 @@ from typing import Optional, Any, List
 from minion_agent.config import AgentFramework, AgentConfig
 from minion_agent.frameworks.deep_research_llms import asingle_shot_llm_call
 from minion_agent.frameworks.minion_agent import MinionAgent
-from minion_agent.tools.wrappers import import_and_wrap_tools
 from minion_agent.frameworks.deep_research_types import (
     ResearchPlan,
     SourceList,
@@ -683,6 +682,7 @@ class DeepResearchAgent(MinionAgent):
     def __init__(
         self, config: AgentConfig, managed_agents: Optional[list[AgentConfig]] = None
     ):
+        super().__init__(config, managed_agents)
         logger.info("Initializing DeepResearchAgent")
         if not deep_research_available:
             logger.error("Deep research dependencies not available")
@@ -696,6 +696,10 @@ class DeepResearchAgent(MinionAgent):
         self._mcp_servers = None
         self._managed_mcp_servers = None
         logger.debug("DeepResearchAgent initialized with config: %s", config)
+
+    @property
+    def framework(self) -> AgentFramework:
+        return AgentFramework.DEEP_RESEARCH
 
     def _get_model(self, agent_config: AgentConfig):
         """Get the model configuration for a smolagents agent."""
@@ -723,18 +727,19 @@ class DeepResearchAgent(MinionAgent):
 
         if not self.managed_agents and not self.config.tools:
             logger.debug("No managed agents or tools configured, using default tools")
+            from minion_agent.tools.web_browsing import search_web,visit_webpage
             self.config.tools = [
-                "minion_agent.tools.web_browsing.search_web",
-                "minion_agent.tools.web_browsing.visit_webpage",
+                search_web,
+                visit_webpage,
             ]
 
         try:
-            tools, mcp_servers = await import_and_wrap_tools(
-                self.config.tools, agent_framework=AgentFramework.SMOLAGENTS
+            tools, mcp_clients = await self._load_tools(
+                self.config.tools or []
             )
             logger.info("Successfully imported and wrapped tools")
-            self._mcp_servers = mcp_servers
-            tools.extend(self._merge_mcp_tools(mcp_servers))
+            self._mcp_servers = mcp_clients
+            tools.extend(self._merge_mcp_tools(mcp_clients))
 
             managed_agents_instanced = []
             if self.managed_agents:
@@ -807,7 +812,7 @@ class DeepResearchAgent(MinionAgent):
             logger.error("Failed to load agent: %s", str(e), exc_info=True)
             raise
 
-    async def run_async(self, prompt: str) -> Any:
+    async def _run_async(self, prompt: str,**kwargs: Any) -> Any:
         """Run the Smolagents agent with the given prompt."""
         logger.info("Running async research with prompt: %s", prompt)
         try:
