@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from minion_agent.callbacks.context import Context
 
 
-class _SmolagentsSpanGeneration(_SpanGeneration):
+class _ExternalMinionAgentSpanGeneration(_SpanGeneration):
     def before_llm_call(self, context: Context, *args, **kwargs) -> Context:
         model_id = context.shared["model_id"]
 
@@ -44,8 +44,8 @@ class _SmolagentsSpanGeneration(_SpanGeneration):
 
         input_tokens = 0
         output_tokens = 0
-        if raw := response.raw.model_dump():
-            if token_usage := raw.get("usage", None):
+        if raw := response.raw:
+            if token_usage := getattr(raw,"usage", None):
                 input_tokens = token_usage.get("prompt_tokens", None)
                 output_tokens = token_usage.get("completion_tokens", None)
 

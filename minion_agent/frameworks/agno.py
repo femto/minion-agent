@@ -29,9 +29,8 @@ class AgnoAgent(MinionAgent):
         self,
         config: AgentConfig,
         managed_agents: list[AgentConfig] | None = None,
-        tracing: TracingConfig | None = None,
     ):
-        super().__init__(config, managed_agents, tracing)
+        super().__init__(config, managed_agents)
         self._agent: Agent | Team | None = None
 
     @property

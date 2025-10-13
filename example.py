@@ -75,8 +75,8 @@ agent_config = AgentConfig(
                 "model": "gpt-4o",  # Actual model to use in minion framework
                 },
     tools=[
-      #minion_agent.tools.browser_tool.browser,
-       MCPStdio(
+      minion_agent.tools.browser_tool.browser,
+      MCPStdio(
             command="npx",
             args=["-y", "@modelcontextprotocol/server-filesystem","/Users/femtozheng/workspace","/Users/femtozheng/python-project/minion-agent"]
         ),

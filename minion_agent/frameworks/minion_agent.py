@@ -69,8 +69,7 @@ class MinionAgent(ABC):
     This provides a unified interface for different agent frameworks.
     """
 
-    def __init__(self, config: AgentConfig,managed_agents: list[AgentConfig] | None = None,
-        tracing: "TracingConfig" | None = None):
+    def __init__(self, config: AgentConfig, managed_agents: list[AgentConfig] | None = None):
         self.config = config
 
         self._mcp_clients: list[MCPClient] = []
@@ -83,7 +82,7 @@ class MinionAgent(ABC):
 
         self._lock = asyncio.Lock()
         self._callback_contexts: dict[int, Context] = {}
-        self.managed_agents =  managed_agents or []
+        self.managed_agents = managed_agents or []
 
 
     @staticmethod
@@ -138,12 +137,14 @@ class MinionAgent(ABC):
         cls,
         agent_framework: AgentFramework | str,
         agent_config: AgentConfig,
+        managed_agents: list[AgentConfig] | None = None,
     ) -> MinionAgent:
         """Create an agent using the given framework and config."""
         return run_async_in_sync(
             cls.create_async(
                 agent_framework=agent_framework,
                 agent_config=agent_config,
+                managed_agents=managed_agents,
             ),
             allow_running_loop=INSIDE_NOTEBOOK,
         )
@@ -153,10 +154,11 @@ class MinionAgent(ABC):
         cls,
         agent_framework: AgentFramework | str,
         agent_config: AgentConfig,
+        managed_agents: list[AgentConfig] | None = None,
     ) -> MinionAgent:
         """Create an agent using the given framework and config."""
         agent_cls = cls._get_agent_type_by_framework(agent_framework)
-        agent = agent_cls(agent_config)
+        agent = agent_cls(agent_config, managed_agents=managed_agents)
         await agent._load_agent()
         return agent
 

@@ -75,7 +75,7 @@ agent_config = AgentConfig(
                 "api_version": os.environ.get("OPENAI_API_VERSION"),
                 },
     tools=[
-        #minion_agent.tools.browser_tool.browser,
+       minion_agent.tools.browser_tool.browser,
        MCPStdio(
             command="npx",
             args=["-y", "@modelcontextprotocol/server-filesystem","/Users/femtozheng/workspace","/Users/femtozheng/python-project/minion-agent"]
@@ -118,7 +118,7 @@ async def main():
         #       "Fill the empty nodes with your own ideas. Be creative! Use your own words!"
         #       "I will tip you $100,000 if you write a good novel."
         #       "Since the novel is very long, you may need to divide it into subtasks.")
-        print("Agent's response:", result)
+        print("Agent's response:", result.final_output)
     except Exception as e:
         print(f"Error: {str(e)}")
         # 如果需要调试

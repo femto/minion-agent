@@ -17,6 +17,7 @@ class AgentFramework(StrEnum):
     AGNO = auto()
     SMOLAGENTS = auto()
     TINYAGENT = auto()
+    DEEP_RESEARCH = auto()
     EXTERNAL_MINION_AGENT = auto()
 
     @classmethod
@@ -231,6 +232,7 @@ class AgentConfig(BaseModel):
 
     Using this parameter you can define a Pydantic model that will be returned by the agent run methods.
     """
+    framework: AgentFramework | None = None
 
 
 class TracingConfig(BaseModel):

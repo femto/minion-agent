@@ -9,7 +9,7 @@ from .user_interaction import (
 )
 from .web_browsing import search_tavily, search_web, visit_webpage
 from .wrappers import _wrap_tools
-
+from . import browser_tool,generation
 __all__ = [
     "MCPClient",
     "_wrap_tools",
@@ -23,4 +23,6 @@ __all__ = [
     "show_final_output",
     "show_plan",
     "visit_webpage",
+    "browser_tool",
+    "generation"
 ]

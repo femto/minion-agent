@@ -11,6 +11,7 @@ from .llama_index import _LlamaIndexSpanGeneration
 from .openai import _OpenAIAgentsSpanGeneration
 from .smolagents import _SmolagentsSpanGeneration
 from .tinyagent import _TinyAgentSpanGeneration
+from .minion import _ExternalMinionAgentSpanGeneration
 
 SpanGeneration = (
     _AgnoSpanGeneration
@@ -20,6 +21,7 @@ SpanGeneration = (
     | _OpenAIAgentsSpanGeneration
     | _SmolagentsSpanGeneration
     | _TinyAgentSpanGeneration
+    | _ExternalMinionAgentSpanGeneration
 )
 
 
@@ -41,10 +43,12 @@ def _get_span_generation_callback(
     if framework is AgentFramework.OPENAI:
         return _OpenAIAgentsSpanGeneration()
 
-    if framework is AgentFramework.SMOLAGENTS or framework is AgentFramework.EXTERNAL_MINION_AGENT:
+    if framework is AgentFramework.SMOLAGENTS:
         return _SmolagentsSpanGeneration()
 
     if framework is AgentFramework.TINYAGENT:
         return _TinyAgentSpanGeneration()
+    if framework is AgentFramework.EXTERNAL_MINION_AGENT:
+        return _ExternalMinionAgentSpanGeneration()
 
     assert_never(framework)

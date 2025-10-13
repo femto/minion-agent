@@ -5,7 +5,7 @@ import litellm
 from dotenv import load_dotenv
 from minion_agent.config import AgentConfig, AgentFramework, MCPStdio
 from minion_agent import MinionAgent
-from smolagents import AzureOpenAIServerModel
+from smolagents import AzureOpenAIServerModel, CodeAgent
 import minion_agent
 
 # Load environment variables
@@ -25,6 +25,7 @@ async def main():
                     },
         model_type=AzureOpenAIServerModel,  # Updated to use our custom model
         # model_type="CustomAzureOpenAIServerModel",  # Updated to use our custom model
+        agent_type=CodeAgent,
         agent_args={"additional_authorized_imports": "*",
                     # "planning_interval":3
                     },
