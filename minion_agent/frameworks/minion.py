@@ -102,6 +102,8 @@ class ExternalMinionAgent(MinionAgent):
             raise ImportError(msg)
 
         tools, _ = await self._load_tools(self.config.tools or [])
+        # Process tools to handle name sanitization and conflicts
+        tools = self._process_tools_for_minion(tools)
 
         #todo, support managed_agents
         managed_agents_instanced = []
@@ -109,6 +111,8 @@ class ExternalMinionAgent(MinionAgent):
             for managed_agent in self.managed_agents:
                 agent_type = managed_agent.agent_type or DEFAULT_AGENT_TYPE
                 managed_tools, _ = await self._load_tools(managed_agent.tools)
+                # Process managed agent tools as well
+                managed_tools = self._process_tools_for_minion(managed_tools)
                 managed_agent_instance = agent_type(
                     name=managed_agent.name,
                     model=self._get_model(managed_agent),
@@ -148,6 +152,40 @@ class ExternalMinionAgent(MinionAgent):
                 self._agent.setup()
 
         assert self._agent
+
+    def _process_tools_for_minion(self, tools: list[Any]) -> list[Any]:
+        """Process tools to handle name sanitization and conflicts for minion framework.
+        
+        This ensures that MCP tools with hyphens in their names work properly
+        with CodeAgent's Python code generation.
+        """
+        processed_tools = []
+        name_counts = {}
+        
+        for tool in tools:
+            if hasattr(tool, '__name__'):
+                original_name = tool.__name__
+                sanitized_name = sanitize_tool_name(original_name)
+                
+                # Handle name conflicts by adding a suffix
+                if sanitized_name in name_counts:
+                    name_counts[sanitized_name] += 1
+                    sanitized_name = f"{sanitized_name}_{name_counts[sanitized_name]}"
+                else:
+                    name_counts[sanitized_name] = 0
+                
+                # Update the tool's name if it was changed
+                if sanitized_name != original_name:
+                    tool.__name__ = sanitized_name
+                    
+                    # Update docstring to mention original name if it exists
+                    if hasattr(tool, '__doc__') and tool.__doc__:
+                        if not tool.__doc__.startswith(f"Original MCP name: {original_name}"):
+                            tool.__doc__ = f"Original MCP name: {original_name}\n\n{tool.__doc__}"
+            
+            processed_tools.append(tool)
+        
+        return processed_tools
 
     async def _run_async(self, prompt: str, **kwargs: Any) -> str:
         if not self._agent:

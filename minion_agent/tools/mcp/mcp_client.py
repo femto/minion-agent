@@ -17,6 +17,7 @@ from minion_agent.config import (
     MCPStdio,
     MCPStreamableHttp,
 )
+from minion_agent.utils.tool_utils import sanitize_tool_name
 
 missing_mcp_error = None
 try:
@@ -185,6 +186,7 @@ class MCPClient(BaseModel):
             try:
                 if not self._session:
                     return f"Error: MCP session not available for tool {name}"
+                # Use original MCP name for the actual call
                 result = await self._session.call_tool(name, kwargs)
                 if hasattr(result, "content") and result.content:
                     if hasattr(result.content[0], "text"):
@@ -195,10 +197,15 @@ class MCPClient(BaseModel):
                 return f"Error calling MCP tool {name}: {e!s}"
 
         # Set function metadata
-        mcp_tool_function.__name__ = name
+        # Sanitize tool name to be a valid Python identifier
+        sanitized_name = sanitize_tool_name(name)
+        mcp_tool_function.__name__ = sanitized_name
         mcp_tool_function.__doc__ = enhanced_description
         mcp_tool_function.__signature__ = signature  # type: ignore[attr-defined]
         mcp_tool_function.__annotations__ = {**annotations, "return": str}
+        
+        # Store original name for MCP calls
+        mcp_tool_function._original_mcp_name = name  # type: ignore[attr-defined]
 
         return mcp_tool_function
 
@@ -215,6 +222,8 @@ class MCPClient(BaseModel):
         """Convert JSON schema to Python type using robust conversion."""
         schema_type = schema.get("type", "string")
         return self.TYPE_MAPPING.get(schema_type, str)
+
+
 
     def _create_enhanced_description(self, description: str, input_schema: Any) -> str:
         """Create enhanced docstring with parameter descriptions."""
