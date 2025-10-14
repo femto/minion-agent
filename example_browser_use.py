@@ -20,22 +20,24 @@ async def main():
         raise ValueError("AZURE_DEPLOYMENT_NAME environment variable is not set")
     if not api_version:
         raise ValueError("OPENAI_API_VERSION environment variable is not set")
-
+    from browser_use import Agent, Browser
     # Create agent configuration
     config = AgentConfig(
         name="browser-agent",
         model_type=browser_use.ChatAzureOpenAI,
         model_id=azure_deployment,
+        agent_args={
+#             "browser":Browser(
+#     executable_path='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+#     user_data_dir='~/Library/Application Support/Google/Chrome',
+#     profile_directory='Profile for browser-use',
+# )
+        },
         model_args={
             # "azure_deployment": azure_deployment,
             # "api_version": api_version,
         },
         tools=[
-            #minion_agent.tools.browser_tool.browser,
-            MCPStdio(
-                command="npx",
-                args=["-y", "@modelcontextprotocol/server-filesystem","/Users/femtozheng/workspace","/Users/femtozheng/python-project/minion-agent"]
-            )
         ],
         instructions="Compare the price of gpt-4o and DeepSeek-V3",
     )

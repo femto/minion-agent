@@ -61,15 +61,10 @@ class BrowserUseAgent(MinionAgent):
         )
         self._mcp_servers = mcp_clients
 
-        # Initialize the browser-use Agent
-        browser = Browser(
-
-        )
-
         self._agent = Agent(
             task=self.config.instructions or "No specific task provided",
             llm=self._get_model(self.config),
-            browser = browser,
+            **self.config.agent_args or {},
         )
 
     async def _run_async(self, prompt: str) -> Any:
