@@ -17,12 +17,6 @@ from minion_agent.config import MCPStdio, MCPSse
 from minion_agent.logging import setup_logger
 from minion_agent.tools.run_apple_script import run_applescript, run_applescript_capture, run_command
 
-
-def parse_tool_args_if_needed(message: ChatMessage) -> ChatMessage:
-    for tool_call in message.tool_calls:
-        tool_call.function.arguments = parse_json_if_needed(tool_call.function.arguments)
-    return message
-
 # Load environment variables from .env file
 load_dotenv()
 
@@ -34,35 +28,6 @@ from minion.agents import (
 
 )
 from minion_agent.frameworks.minion import SurrogateModel
-
-# Set up screenshot callback for Playwright
-# def save_screenshot(memory_step: ActionStep, agent: CodeAgent) -> None:
-#     sleep(1.0)  # Let JavaScript animations happen before taking the screenshot
-#
-#     # Get the browser tool
-#     browser_tool = agent.tools.get("browser")
-#     if browser_tool:
-#         # Clean up old screenshots to save memory
-#         for previous_memory_step in agent.memory.steps:
-#             if isinstance(previous_memory_step, ActionStep) and previous_memory_step.step_number <= memory_step.step_number - 2:
-#                 previous_memory_step.observations_images = None
-#
-#         # Take screenshot using Playwright
-#         result = browser_tool(action="screenshot")
-#         if result["success"] and "screenshot" in result.get("data", {}):
-#             # Convert bytes to PIL Image
-#             screenshot_bytes = result["data"]["screenshot"]
-#             image = Image.open(BytesIO(screenshot_bytes))
-#             print(f"Captured a browser screenshot: {image.size} pixels")
-#             memory_step.observations_images = [image.copy()]  # Create a copy to ensure it persists
-#
-#         # Get current URL
-#         state_result = browser_tool(action="get_current_state")
-#         if state_result["success"] and "url" in state_result.get("data", {}):
-#             url_info = f"Current url: {state_result['data']['url']}"
-#             memory_step.observations = (
-#                 url_info if memory_step.observations is None else memory_step.observations + "\n" + url_info
-#             )
 
 # Configure the agent
 agent_config = AgentConfig(
