@@ -5,13 +5,17 @@
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/femto/minion-agent)
 # Minion Agent
 
-A simple agent framework that's capable of browser use + mcp + auto instrument + plan + deep research + more
+A powerful agent framework with enhanced capabilities including browser automation, code execution, MCP tool support, and deep research. **Now defaults to EXTERNAL_MINION_AGENT framework** for superior performance and functionality.
 
 ## 🎬 Demo Videos
 
 - [Compare Price Demo](https://youtu.be/O0RhA3eeDlg)
 - [Deep Research Demo](https://youtu.be/tOd56nagsT4)
 - [Generating Snake Game Demo](https://youtu.be/UBquRXD9ZJc)
+
+## Quick Start
+
+Minion Agent now defaults to the powerful `EXTERNAL_MINION_AGENT` framework, providing enhanced code execution, browser automation, and advanced planning capabilities out of the box.
 
 ## Installation
 
@@ -30,34 +34,42 @@ pip install -e .
 Here's a simple example of how to use Minion Agent:
 
 ```python
-from smolagents import (
-    AzureOpenAIServerModel,
-)
-from minion_agent import MinionAgent, AgentConfig, AgentFramework
-from dotenv import load_dotenv
+import asyncio
 import os
+from dotenv import load_dotenv
+from minion_agent import MinionAgent, AgentConfig, AgentFramework
+from minion.agents import CodeAgent
+import minion_agent
 
 load_dotenv()
+
 async def main():
-    # Configure the agent
+    # Configure the agent (using EXTERNAL_MINION_AGENT as default)
     agent_config = AgentConfig(
         model_id=os.environ.get("AZURE_DEPLOYMENT_NAME"),
         name="research_assistant",
         description="A helpful research assistant",
-        model_args={"azure_endpoint": os.environ.get("AZURE_OPENAI_ENDPOINT"),
-                    "api_key": os.environ.get("AZURE_OPENAI_API_KEY"),
-                    "api_version": os.environ.get("OPENAI_API_VERSION"),
-                    },
-        model_type=AzureOpenAIServerModel,  # use "AzureOpenAIServerModel" for auzre, use "OpenAIServerModel" for openai, use "LiteLLMModel" for litellm
+        model_args={
+            "azure_endpoint": os.environ.get("AZURE_OPENAI_ENDPOINT"),
+            "api_key": os.environ.get("AZURE_OPENAI_API_KEY"),
+            "api_version": os.environ.get("OPENAI_API_VERSION"),
+            "model": "gpt-4o",  # Actual model to use in minion framework
+        },
+        tools=[
+            minion_agent.tools.browser_tool.browser,
+        ],
+        agent_type=CodeAgent,  # Default agent type for EXTERNAL_MINION_AGENT
     )
 
-    agent = await MinionAgent.create(AgentFramework.SMOLAGENTS, agent_config)
+    # Create agent with EXTERNAL_MINION_AGENT framework (default)
+    agent = await MinionAgent.create_async(AgentFramework.EXTERNAL_MINION_AGENT, agent_config)
 
     # Run the agent with a question
-    result = agent.run("What are the latest developments in AI?")
-    print("Agent's response:", result)
-import asyncio
-asyncio.run(main())
+    result = await agent.run_async("What are the latest developments in AI?")
+    print("Agent's response:", result.final_output.content)
+
+if __name__ == "__main__":
+    asyncio.run(main())
 ```
 
 see example.py
@@ -65,6 +77,39 @@ see example_browser_use.py
 see example_with_managed_agents.py
 see example_deep_research.py
 see example_reason.py
+
+## Agent Frameworks
+
+Minion Agent supports multiple agent frameworks. The default framework is `EXTERNAL_MINION_AGENT`, which provides enhanced capabilities including:
+
+- **Code Generation and Execution**: Advanced code generation with built-in execution capabilities
+- **Browser Automation**: Integrated browser control and web interaction
+- **MCP Tool Support**: Full Model Context Protocol integration
+- **Enhanced Planning**: Sophisticated task planning and execution
+
+### Available Frameworks
+
+- `EXTERNAL_MINION_AGENT` (Default): Enhanced framework with code execution and browser capabilities
+- `SMOLAGENTS`: HuggingFace's smolagents framework with planning support
+- `LANGCHAIN`: LangChain-based agents
+- `OPENAI`: OpenAI's assistant API
+- `BROWSER_USE`: Specialized for browser automation tasks
+- `DEEP_RESEARCH`: Optimized for research and information gathering
+
+### Framework-Specific Agent Types
+
+When using `EXTERNAL_MINION_AGENT`, you can specify different agent types:
+
+```python
+from minion.agents import CodeAgent, ToolCallingAgent
+
+agent_config = AgentConfig(
+    # ... other config ...
+    agent_type=CodeAgent,  # For code generation and execution
+    # or
+    # agent_type=ToolCallingAgent,  # For general tool calling
+)
+```
 
 ## Configuration
 
@@ -153,7 +198,18 @@ The `planning_interval` parameter determines how often the agent should create a
 Make sure to set up your environment variables in a `.env` file:
 
 ```env
-OPENAI_API_KEY=your_api_key_here
+# For Azure OpenAI (recommended for EXTERNAL_MINION_AGENT)
+AZURE_DEPLOYMENT_NAME=your_deployment_name
+AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com/
+AZURE_OPENAI_API_KEY=your_azure_api_key
+OPENAI_API_VERSION=2024-02-15-preview
+
+# Or for OpenAI
+OPENAI_API_KEY=your_openai_api_key
+
+# Optional: For other providers via LiteLLM
+# ANTHROPIC_API_KEY=your_anthropic_key
+# GOOGLE_API_KEY=your_google_key
 ```
 
 ## Development
