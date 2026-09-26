@@ -195,3 +195,71 @@ def test_search_youcom_non_numeric_max_results(monkeypatch):
     result = search_youcom("minion agent framework", max_results="many")
     assert result.startswith("An unexpected error occurred:")
     assert not post_called["called"], "requests.post should not be called for a bad max_results"
+
+
+def test_search_serply_missing_api_key(monkeypatch):
+    """Test that search_serply returns a clear message when SERPLY_API_KEY is not set."""
+    from minion_agent.tools.web_browsing import search_serply
+
+    monkeypatch.delenv("SERPLY_API_KEY", raising=False)
+    result = search_serply("minion agent framework")
+    assert result == "SERPLY_API_KEY environment variable not set."
+
+
+def test_search_serply_formats_results(monkeypatch):
+    """Test that search_serply sends the query and formats results like search_tavily."""
+    from minion_agent.tools import web_browsing
+    from minion_agent.tools.web_browsing import search_serply
+
+    monkeypatch.setenv("SERPLY_API_KEY", "test-key")
+    captured = {}
+
+    class _FakeResponse:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {
+                "results": [
+                    {
+                        "title": "Minion Agent",
+                        "link": "https://example.com/minion",
+                        "description": "A simple agent framework.",
+                    },
+                    {
+                        "title": "Second result",
+                        "link": "https://example.com/two",
+                        "description": "Another snippet.",
+                    },
+                ]
+            }
+
+    def _fake_get(url, params=None, headers=None, timeout=None):
+        captured.update(url=url, params=params, headers=headers)
+        return _FakeResponse()
+
+    monkeypatch.setattr(web_browsing.requests, "get", _fake_get)
+    result = search_serply("minion agent framework", max_results=50)
+    assert captured["url"] == "https://api.serply.io/v1/search"
+    assert captured["params"] == {"q": "minion agent framework", "num": 10}
+    assert captured["headers"]["X-Api-Key"] == "test-key"
+    assert "[Minion Agent](https://example.com/minion)" in result
+    assert "A simple agent framework." in result
+    assert "[Second result](https://example.com/two)" in result
+
+
+def test_search_serply_handles_request_error(monkeypatch):
+    """Test that search_serply returns an error message instead of raising."""
+    from requests.exceptions import ConnectionError as RequestsConnectionError
+
+    from minion_agent.tools import web_browsing
+    from minion_agent.tools.web_browsing import search_serply
+
+    monkeypatch.setenv("SERPLY_API_KEY", "test-key")
+
+    def _fake_get(url, params=None, headers=None, timeout=None):
+        raise RequestsConnectionError("no network")
+
+    monkeypatch.setattr(web_browsing.requests, "get", _fake_get)
+    result = search_serply("minion agent framework")
+    assert result.startswith("Error fetching Serply search:")

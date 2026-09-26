@@ -182,6 +182,7 @@ tools=[
 - `search_web` — DuckDuckGo search (requires `duckduckgo_search`)
 - `search_tavily` — Tavily search (requires `tavily-python` and `TAVILY_API_KEY`)
 - `search_youcom` — You.com search (requires `YDC_API_KEY`, get one at [you.com/platform/api-keys](https://you.com/platform/api-keys))
+- `search_serply` - Google results via Serply (requires `SERPLY_API_KEY`, get one at [serply.io](https://serply.io), see the [API docs](https://serply.io/docs))
 
 ```python
 from minion_agent.tools import search_youcom

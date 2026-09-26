@@ -157,3 +157,46 @@ def search_youcom(query: str, max_results: int = 5) -> str:
         return f"Error fetching You.com search: {e!s}"
     except Exception as e:
         return f"An unexpected error occurred: {e!s}"
+
+
+def search_serply(query: str, max_results: int = 5) -> str:
+    """Perform a Serply web search (Google results) based on your query and return the top search results.
+
+    Uses the Serply Search API (https://serply.io/docs).
+    Requires the SERPLY_API_KEY environment variable (get a key at
+    https://serply.io, the free tier includes 2,500 credits).
+
+    Args:
+        query (str): The search query to perform.
+        max_results (int): The maximum number of results to return (default=5).
+
+    Returns:
+        The top search results as a formatted string.
+
+    """
+    api_key = os.getenv("SERPLY_API_KEY")
+    if not api_key:
+        return "SERPLY_API_KEY environment variable not set."
+
+    try:
+        # Serply returns at most 10 results per request; clamp to 1-10. The
+        # conversion sits inside the try so a non-numeric max_results degrades
+        # to a returned error message instead of an unhandled exception.
+        num = max(1, min(int(max_results), 10))
+        response = requests.get(
+            "https://api.serply.io/v1/search",
+            params={"q": query, "num": num},
+            headers={"X-Api-Key": api_key, "User-Agent": "minion-agent"},
+            timeout=30,
+        )
+        response.raise_for_status()
+        results = response.json().get("results", [])[:num]
+        output = [
+            f"[{result.get('title', 'No Title')}]({result.get('link', '#')})\n{result.get('description', '')}"
+            for result in results
+        ]
+        return "\n\n".join(output) if output else "No results found."
+    except RequestException as e:
+        return f"Error fetching Serply search: {e!s}"
+    except Exception as e:
+        return f"An unexpected error occurred: {e!s}"
