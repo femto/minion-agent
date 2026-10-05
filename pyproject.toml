@@ -1,6 +1,6 @@
 [project]
 name = "minion-agent-x"
-version = "0.1.3"
+version = "0.1.5"
 description = "An enhanced version of minion-agent with extended capabilities"
 authors = [
     {name = "femtozheng", email = "femtozheng@example.com"},
