@@ -189,7 +189,11 @@ class MCPClient(BaseModel):
                 # Use original MCP name for the actual call
                 result = await self._session.call_tool(name, kwargs)
                 if result.isError:
-                    return f"Error calling MCP tool {name}: {result.content}"
+                    error_text = "\n".join(
+                        block.text if hasattr(block, "text") else str(block)
+                        for block in result.content
+                    )
+                    return f"Error calling MCP tool {name}: {error_text}"
                 if hasattr(result, "content") and result.content:
                     if hasattr(result.content[0], "text"):
                         return result.content[0].text
