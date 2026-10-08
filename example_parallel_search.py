@@ -1,7 +1,19 @@
 """Call Parallel search/fetch through Minion Agent's Streamable HTTP MCP client.
 
 This example executes tools directly; it does not invoke a language model.
-See README.md for installation and command-line usage.
+From the repository root, install in a fresh environment and run:
+
+    python -m venv .venv
+    source .venv/bin/activate
+    pip install -e '.[mcp]'
+    python example_parallel_search.py "Explain asyncio tasks" \
+        --query "Python asyncio tasks documentation" \
+        --url https://docs.python.org/3/library/asyncio-task.html
+
+Omit --url for search only; repeat --query or --url for related queries/pages.
+No model credentials or Parallel API key are needed. Anonymous access has lower
+rate limits and is intended for exploration and light use; see
+https://docs.parallel.ai/integrations/mcp/search-mcp for current limits.
 """
 
 import argparse
@@ -30,7 +42,7 @@ async def main(args: argparse.Namespace) -> None:
             session_id=session_id,
         )
         print(search)
-        if search.startswith("Error"):
+        if search.startswith("Error:"):
             raise RuntimeError("Search failed; see the tool response above.")
         if args.url:
             fetched = await tools["web_fetch"](
@@ -40,7 +52,7 @@ async def main(args: argparse.Namespace) -> None:
                 session_id=session_id,
             )
             print(fetched)
-            if fetched.startswith("Error"):
+            if fetched.startswith("Error:"):
                 raise RuntimeError("Fetch failed; see the tool response above.")
     finally:
         await client.disconnect()

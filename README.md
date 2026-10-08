@@ -175,41 +175,6 @@ tools=[
 ]
 ```
 
-### Parallel Search MCP example (Streamable HTTP)
-
-[example_parallel_search.py](example_parallel_search.py) uses the existing
-`MCPClient` and `MCPStreamableHttp` configuration to discover and call
-`web_search` and, optionally, `web_fetch`. It prints the tool responses, including
-source URLs and excerpts. It executes tools directly without a language model,
-so no model credentials or Parallel API key are needed. Existing agent defaults
-are unchanged.
-
-From the repository root, install the example dependencies in a fresh environment:
-
-```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements-parallel-search.txt
-python example_parallel_search.py "Find Python asyncio documentation" \
-  --query "Python asyncio official documentation"
-```
-
-To also fetch a specific page, append `--url` (repeat it for related pages):
-
-```bash
-python example_parallel_search.py "Explain asyncio tasks" \
-  --query "Python asyncio tasks documentation" \
-  --url https://docs.python.org/3/library/asyncio-task.html
-```
-
-The example connects to `https://search.parallel.ai/mcp` with a project
-User-Agent and a 60-second session read timeout. It reuses one session identifier
-for search and fetch and closes the client on exit. The install file constrains
-MCP to 1.x for the existing client's API and includes dependencies needed by the
-package's imports. See the [Parallel Search MCP documentation](https://docs.parallel.ai/integrations/mcp/search-mcp)
-for anonymous free-tier limits; the free endpoint is intended for exploration
-and light use.
-
 ## Web Search Tools
 
 `minion_agent.tools` ships a few optional web search helpers that can be passed to an agent like any other tool:
