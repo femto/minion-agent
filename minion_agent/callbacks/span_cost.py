@@ -3,8 +3,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from litellm.cost_calculator import cost_per_token
-
 from minion_agent.callbacks.base import Callback
 from minion_agent.logging import logger
 from minion_agent.tracing.attributes import GenAI
@@ -19,7 +17,14 @@ if TYPE_CHECKING:
 
 
 def add_cost_info(span: Span) -> None:
-    """Use litellm to compute cost and add it to span attributes."""
+    """Use litellm to compute cost and add it to span attributes.
+
+    litellm is optional: without it, spans simply carry no cost info.
+    """
+    try:
+        from litellm.cost_calculator import cost_per_token
+    except ImportError:
+        return
     attributes: Mapping[str, AttributeValue] = span.attributes
     if any(
         key in attributes
