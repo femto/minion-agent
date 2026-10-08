@@ -5,7 +5,6 @@ import json
 import os
 from collections.abc import Callable, Sequence
 from contextlib import AsyncExitStack
-from datetime import timedelta
 from textwrap import dedent
 from typing import Any, ClassVar, Optional
 
@@ -18,6 +17,7 @@ from minion_agent.config import (
     MCPStdio,
     MCPStreamableHttp,
 )
+from minion_agent.tools.mcp._compat import get_field, open_streamable_http, session_read_timeout
 from minion_agent.utils.tool_utils import sanitize_tool_name
 
 missing_mcp_error = None
@@ -25,7 +25,6 @@ try:
     from mcp import ClientSession, StdioServerParameters
     from mcp.client.sse import sse_client
     from mcp.client.stdio import stdio_client
-    from mcp.client.streamable_http import streamablehttp_client
     from mcp.types import Tool as MCPTool
 except ImportError as e:
     missing_mcp_error = e
@@ -44,10 +43,7 @@ def call_tool_error_text(result: Any) -> str | None:
     carries the actionable message, so it takes precedence over
     ``structuredContent``.
     """
-    is_error = getattr(result, "is_error", None)
-    if is_error is None:
-        is_error = getattr(result, "isError", False)
-    if not is_error:
+    if not get_field(result, "is_error", "isError", False):
         return None
     texts = [
         item.text if hasattr(item, "text") else str(item)
@@ -55,9 +51,7 @@ def call_tool_error_text(result: Any) -> str | None:
     ]
     if texts:
         return "\n".join(texts)
-    structured = getattr(result, "structured_content", None)
-    if structured is None:
-        structured = getattr(result, "structuredContent", None)
+    structured = get_field(result, "structured_content", "structuredContent")
     if structured is not None:
         return json.dumps(structured, ensure_ascii=False)
     return "the server reported an error without details"
@@ -72,9 +66,6 @@ class MCPClient(BaseModel):
     _session: ClientSession | None = PrivateAttr(default=None)
     _exit_stack: AsyncExitStack = PrivateAttr(default_factory=AsyncExitStack)
     _client: Any | None = PrivateAttr(default=None)
-    _get_session_id_callback: Callable[[], str | None] | None = PrivateAttr(
-        default=None
-    )
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
@@ -101,23 +92,20 @@ class MCPClient(BaseModel):
             )
             read, write = await self._exit_stack.enter_async_context(self._client)
         elif isinstance(self.config, MCPStreamableHttp):
-            self._client = streamablehttp_client(
+            read, write = await open_streamable_http(
+                self._exit_stack,
                 url=self.config.url,
                 headers=dict(self.config.headers or {}),
             )
-            transport = await self._exit_stack.enter_async_context(self._client)
-            read, write, self._get_session_id_callback = transport
         else:
             msg = f"Unsupported MCP config type: {type(self.config)}"
             raise ValueError(msg)
 
         # Create and initialize session (common for all transports)
-        timeout = (
-            timedelta(seconds=self.config.client_session_timeout_seconds)
-            if self.config.client_session_timeout_seconds
-            else None
+        timeout = session_read_timeout(
+            self.config.client_session_timeout_seconds or None
         )
-        client_session = ClientSession(read, write, timeout)
+        client_session = ClientSession(read, write, read_timeout_seconds=timeout)
         self._session = await self._exit_stack.enter_async_context(client_session)
         await self._session.initialize()
 
@@ -172,7 +160,7 @@ class MCPClient(BaseModel):
         """Create a properly typed function for an MCP tool."""
         name = tool.name
         description = tool.description or f"MCP tool: {name}"
-        input_schema = tool.inputSchema
+        input_schema = get_field(tool, "input_schema", "inputSchema")
 
         # Extract parameters from schema
         parameters = []
