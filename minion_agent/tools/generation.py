@@ -1,8 +1,15 @@
 import re
 from typing import Optional
 
-import pypandoc
-from pymdownx.superfences import SuperFencesCodeExtension
+DEEP_RESEARCH_INSTALL_HINT = "pip install 'minion-agent-x[deep-research]'"
+
+
+def _missing_deep_research_dependency(error: ImportError) -> ImportError:
+    return ImportError(
+        f"Report generation requires the deep-research extra ({error.name} is not installed). "
+        f"Install it with: {DEEP_RESEARCH_INSTALL_HINT}"
+    )
+
 
 def generate_pdf(answer: str, filename: str = "research_report.pdf") -> None:
     """
@@ -18,6 +25,11 @@ def generate_pdf(answer: str, filename: str = "research_report.pdf") -> None:
     Returns:
         None. Writes PDF to file.
     """
+    try:
+        import pypandoc
+    except ImportError as e:
+        raise _missing_deep_research_dependency(e) from e
+
     # Extract the first line as title and rest as content
     lines = answer.split("\n")
     title = lines[0].strip("# ")  # Remove any markdown heading characters
@@ -117,6 +129,11 @@ def generate_html(
     Returns:
         HTML string
     """
+    try:
+        from pymdownx.superfences import SuperFencesCodeExtension
+    except ImportError as e:
+        raise _missing_deep_research_dependency(e) from e
+
     try:
         import datetime
         import markdown
