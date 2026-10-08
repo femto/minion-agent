@@ -1,6 +1,7 @@
 """Simplified MCP client that handles all transport types and frameworks."""
 
 import inspect
+import json
 import os
 from collections.abc import Callable, Sequence
 from contextlib import AsyncExitStack
@@ -28,6 +29,38 @@ try:
     from mcp.types import Tool as MCPTool
 except ImportError as e:
     missing_mcp_error = e
+
+
+def format_mcp_tool_error(tool_name: str, detail: Any) -> str:
+    """Format a failed MCP tool call; callers check for the ``"Error:"`` prefix."""
+    return f"Error: MCP tool {tool_name} failed: {detail}"
+
+
+def call_tool_error_text(result: Any) -> str | None:
+    """Return the error text of a CallToolResult flagged isError, or None if it succeeded.
+
+    Tool execution errors come back as a normal result with ``isError``
+    (``is_error`` on MCP 2.x) set, not as an exception. The text content
+    carries the actionable message, so it takes precedence over
+    ``structuredContent``.
+    """
+    is_error = getattr(result, "is_error", None)
+    if is_error is None:
+        is_error = getattr(result, "isError", False)
+    if not is_error:
+        return None
+    texts = [
+        item.text if hasattr(item, "text") else str(item)
+        for item in (getattr(result, "content", None) or [])
+    ]
+    if texts:
+        return "\n".join(texts)
+    structured = getattr(result, "structured_content", None)
+    if structured is None:
+        structured = getattr(result, "structuredContent", None)
+    if structured is not None:
+        return json.dumps(structured, ensure_ascii=False)
+    return "the server reported an error without details"
 
 
 class MCPClient(BaseModel):
@@ -185,16 +218,19 @@ class MCPClient(BaseModel):
             """Dynamically created MCP tool function."""
             try:
                 if not self._session:
-                    return f"Error: MCP session not available for tool {name}"
+                    return format_mcp_tool_error(name, "MCP session not available")
                 # Use original MCP name for the actual call
                 result = await self._session.call_tool(name, kwargs)
+                error_text = call_tool_error_text(result)
+                if error_text is not None:
+                    return format_mcp_tool_error(name, error_text)
                 if hasattr(result, "content") and result.content:
                     if hasattr(result.content[0], "text"):
                         return result.content[0].text
                     return str(result.content[0])
                 return str(result)
             except Exception as e:
-                return f"Error calling MCP tool {name}: {e!s}"
+                return format_mcp_tool_error(name, e)
 
         # Set function metadata
         # Sanitize tool name to be a valid Python identifier
