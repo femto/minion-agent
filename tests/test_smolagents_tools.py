@@ -40,8 +40,8 @@ def patch_tool_calling_modules(
         'minion.config': mock_config,
         'minion.providers': mock_providers,
         'smolagents': mock_smolagents,
-        'smolagents.agents': mock.MagicMock(),
-        'smolagents.tools': mock.MagicMock(),
+        'smolagents.agents': mock_smolagents.agents,
+        'smolagents.tools': mock_smolagents.tools,
     }
     
     for name, mock_obj in modules.items():
@@ -121,7 +121,7 @@ def test_calculation_tool(patch_tool_calling_modules, mock_smolagents):
     assert calculate("2 ** 3") == "8"
     
     # Test complex calculation
-    assert calculate("123 * 456 + 789") == "56907"
+    assert calculate("123 * 456 + 789") == "56877"
     
     # Verify tool was decorated properly
     assert hasattr(calculate, "_is_tool")
@@ -157,7 +157,7 @@ def test_multiple_tools_integration(patch_tool_calling_modules, mock_smolagents,
             return f"Error calculating: {str(e)}"
     
     # Configure mock agent to return calculation result
-    mock_agent.run.return_value = "The result of 123 * 456 + 789 is 56907"
+    mock_agent.run.return_value = "The result of 123 * 456 + 789 is 56877"
     
     # Create the agent with all three tools
     agent = ToolCallingAgent(
@@ -169,7 +169,7 @@ def test_multiple_tools_integration(patch_tool_calling_modules, mock_smolagents,
     response = agent.run("What is 123 * 456 + 789?")
     
     # Verify we got a proper response
-    assert response == "The result of 123 * 456 + 789 is 56907"
+    assert response == "The result of 123 * 456 + 789 is 56877"
     
     # Verify the model was called with our query
     mock_agent.run.assert_called_with("What is 123 * 456 + 789?") 

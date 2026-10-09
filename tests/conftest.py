@@ -54,6 +54,8 @@ def mock_basic_provider():
     """Fixture to mock a basic provider instance."""
     provider_mock = mock.MagicMock()
     provider_mock.generate_sync.return_value = "Mock response"
+    # The adapter's async path awaits provider.generate()
+    provider_mock.generate = mock.AsyncMock(return_value="Async mock response")
     provider_mock.agenerate = mock.AsyncMock(return_value={
         "choices": [{"message": {"content": "Async mock response"}}]
     })

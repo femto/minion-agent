@@ -40,8 +40,8 @@ def patch_tool_calling_modules(
         'minion.config': mock_config,
         'minion.providers': mock_providers,
         'smolagents': mock_smolagents,
-        'smolagents.agents': mock.MagicMock(),
-        'smolagents.tools': mock.MagicMock(),
+        'smolagents.agents': mock_smolagents.agents,
+        'smolagents.tools': mock_smolagents.tools,
     }
     
     for name, mock_obj in modules.items():

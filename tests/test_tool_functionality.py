@@ -101,7 +101,7 @@ def test_calculate_tool():
     assert calculate("2 ** 3") == "8"
     
     # Test complex calculation
-    assert calculate("123 * 456 + 789") == "56907"
+    assert calculate("123 * 456 + 789") == "56877"
     
     # Test error handling
     assert calculate("1/0").startswith("Error calculating")
