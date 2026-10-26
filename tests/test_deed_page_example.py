@@ -2,6 +2,8 @@
 
 import argparse
 import json
+import os
+import stat
 import tempfile
 import unittest
 from pathlib import Path
@@ -87,6 +89,16 @@ class DeedPageExampleTests(unittest.IsolatedAsyncioTestCase):
         output = " ".join(str(call.args[0]) for call in printed.call_args_list)
         self.assertIn("https://calm-mesa-1a2b.deed.page/", output)
         self.assertNotIn("secret-owner-token", output)
+
+    @unittest.skipIf(os.name == "nt", "POSIX file modes only")
+    def test_save_token_tightens_existing_permissive_file(self):
+        self.token_file.parent.mkdir(parents=True)
+        self.token_file.write_text("old-token\n")
+        os.chmod(self.token_file, 0o644)
+        with patch("builtins.print"):
+            example_deed_page.save_token("new-token")
+        self.assertEqual(stat.S_IMODE(self.token_file.stat().st_mode), 0o600)
+        self.assertEqual(self.token_file.read_text(), "new-token\n")
 
     async def test_delete_sends_saved_token_as_bearer_header(self):
         self.token_file.parent.mkdir(parents=True)

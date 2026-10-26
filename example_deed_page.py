@@ -45,8 +45,11 @@ def load_token() -> str | None:
 
 def save_token(token: str) -> None:
     TOKEN_FILE.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    TOKEN_FILE.touch(mode=0o600, exist_ok=True)
-    TOKEN_FILE.write_text(token + "\n")
+    fd = os.open(TOKEN_FILE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    # O_CREAT's mode only applies to new files; tighten an existing one too.
+    os.chmod(TOKEN_FILE, 0o600)
+    with os.fdopen(fd, "w") as f:
+        f.write(token + "\n")
     print(f"Owner token saved to {TOKEN_FILE}")
 
 
