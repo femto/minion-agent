@@ -93,12 +93,24 @@ class DeedPageExampleTests(unittest.IsolatedAsyncioTestCase):
     @unittest.skipIf(os.name == "nt", "POSIX file modes only")
     def test_save_token_tightens_existing_permissive_file(self):
         self.token_file.parent.mkdir(parents=True)
-        self.token_file.write_text("old-token\n")
+        self.token_file.write_text("a-longer-old-token\n")
         os.chmod(self.token_file, 0o644)
         with patch("builtins.print"):
             example_deed_page.save_token("new-token")
         self.assertEqual(stat.S_IMODE(self.token_file.stat().st_mode), 0o600)
         self.assertEqual(self.token_file.read_text(), "new-token\n")
+
+    @unittest.skipIf(os.name == "nt", "POSIX file modes only")
+    def test_save_token_keeps_old_token_if_chmod_fails(self):
+        self.token_file.parent.mkdir(parents=True)
+        self.token_file.write_text("old-token\n")
+        with (
+            patch("os.fchmod", side_effect=PermissionError("denied")),
+            patch("builtins.print"),
+            self.assertRaises(PermissionError),
+        ):
+            example_deed_page.save_token("new-token")
+        self.assertEqual(self.token_file.read_text(), "old-token\n")
 
     async def test_delete_sends_saved_token_as_bearer_header(self):
         self.token_file.parent.mkdir(parents=True)
