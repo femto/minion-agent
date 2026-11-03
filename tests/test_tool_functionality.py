@@ -259,3 +259,27 @@ def test_search_keenable_request_error(monkeypatch):
 
     monkeypatch.setattr(web_browsing.requests, "post", _boom)
     assert search_keenable("x").startswith("Error fetching Keenable search")
+
+
+@pytest.mark.parametrize("requested,expected", [(0, 1), (-3, 1), (1, 1), (50, 50), (51, 50), (500, 50)])
+def test_search_keenable_clamps_max_results(monkeypatch, requested, expected):
+    from minion_agent.tools import web_browsing
+    from minion_agent.tools.web_browsing import search_keenable
+
+    monkeypatch.delenv("KEENABLE_API_KEY", raising=False)
+    seen = {}
+
+    class _FakeResponse:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"results": []}
+
+    def _fake_post(url, headers=None, json=None, timeout=None):
+        seen["payload"] = json
+        return _FakeResponse()
+
+    monkeypatch.setattr(web_browsing.requests, "post", _fake_post)
+    search_keenable("q", max_results=requested)
+    assert seen["payload"] == {"query": "q", "max_results": expected}
