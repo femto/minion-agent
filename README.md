@@ -182,6 +182,7 @@ tools=[
 - `search_web` — DuckDuckGo search (requires `duckduckgo_search`)
 - `search_tavily` — Tavily search (requires `tavily-python` and `TAVILY_API_KEY`)
 - `search_youcom` — You.com search (requires `YDC_API_KEY`, get one at [you.com/platform/api-keys](https://you.com/platform/api-keys))
+- `search_keenable` — Keenable search (works keyless via the public endpoint; set `KEENABLE_API_KEY` to use the keyed endpoint, see [keenable.ai](https://keenable.ai))
 
 ```python
 from minion_agent.tools import search_youcom

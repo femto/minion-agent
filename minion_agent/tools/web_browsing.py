@@ -157,3 +157,48 @@ def search_youcom(query: str, max_results: int = 5) -> str:
         return f"Error fetching You.com search: {e!s}"
     except Exception as e:
         return f"An unexpected error occurred: {e!s}"
+
+
+def search_keenable(query: str, max_results: int = 5) -> str:
+    """Perform a Keenable web search based on your query and return the top search results.
+
+    Uses the Keenable Search API (https://keenable.ai). If the KEENABLE_API_KEY
+    environment variable is set, the keyed endpoint is used; otherwise the
+    keyless public endpoint is used.
+
+    Args:
+        query (str): The search query to perform.
+        max_results (int): The maximum number of results to return (default=5).
+
+    Returns:
+        The top search results as a formatted string.
+
+    """
+    try:
+        count = max(1, min(int(max_results), 100))
+        api_key = os.getenv("KEENABLE_API_KEY")
+        headers = {"Content-Type": "application/json", "X-Keenable-Title": "minion-agent"}
+        if api_key:
+            url = "https://api.keenable.ai/v1/search"
+            headers["X-API-Key"] = api_key
+        else:
+            url = "https://api.keenable.ai/v1/search/public"
+        response = requests.post(
+            url,
+            headers=headers,
+            json={"query": query, "max_results": count},
+            timeout=30,
+        )
+        response.raise_for_status()
+        results = response.json().get("results") or []
+        output = []
+        for result in results[:count]:
+            snippet = result.get("description") or (result.get("snippet") or "")[:500]
+            output.append(
+                f"[{result.get('title', 'No Title')}]({result.get('url', '#')})\n{snippet}"
+            )
+        return "\n\n".join(output) if output else "No results found."
+    except RequestException as e:
+        return f"Error fetching Keenable search: {e!s}"
+    except Exception as e:
+        return f"An unexpected error occurred: {e!s}"

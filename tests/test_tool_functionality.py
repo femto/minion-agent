@@ -195,3 +195,67 @@ def test_search_youcom_non_numeric_max_results(monkeypatch):
     result = search_youcom("minion agent framework", max_results="many")
     assert result.startswith("An unexpected error occurred:")
     assert not post_called["called"], "requests.post should not be called for a bad max_results"
+
+
+def _keenable_fake(monkeypatch, expected_url, expect_key):
+    from minion_agent.tools import web_browsing
+
+    class _FakeResponse:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {
+                "results": [
+                    {"title": "Minion Agent", "url": "https://example.com/minion", "description": "A simple agent framework."},
+                    {"title": "Second result", "url": "https://example.com/two", "snippet": "Snippet fallback."},
+                ]
+            }
+
+    calls = {}
+
+    def _fake_post(url, headers=None, json=None, timeout=None):
+        calls["url"] = url
+        assert url == expected_url
+        if expect_key:
+            assert headers["X-API-Key"] == "test-key"
+        else:
+            assert "X-API-Key" not in headers
+        assert headers["X-Keenable-Title"] == "minion-agent"
+        assert json == {"query": "minion agent framework", "max_results": 2}
+        return _FakeResponse()
+
+    monkeypatch.setattr(web_browsing.requests, "post", _fake_post)
+    return calls
+
+
+def test_search_keenable_keyed(monkeypatch):
+    from minion_agent.tools.web_browsing import search_keenable
+
+    monkeypatch.setenv("KEENABLE_API_KEY", "test-key")
+    calls = _keenable_fake(monkeypatch, "https://api.keenable.ai/v1/search", True)
+    result = search_keenable("minion agent framework", max_results=2)
+    assert calls["url"] == "https://api.keenable.ai/v1/search"
+    assert "[Minion Agent](https://example.com/minion)" in result
+    assert "A simple agent framework." in result
+    assert "Snippet fallback." in result
+
+
+def test_search_keenable_keyless(monkeypatch):
+    from minion_agent.tools.web_browsing import search_keenable
+
+    monkeypatch.delenv("KEENABLE_API_KEY", raising=False)
+    _keenable_fake(monkeypatch, "https://api.keenable.ai/v1/search/public", False)
+    result = search_keenable("minion agent framework", max_results=2)
+    assert "[Second result](https://example.com/two)" in result
+
+
+def test_search_keenable_request_error(monkeypatch):
+    from minion_agent.tools import web_browsing
+    from minion_agent.tools.web_browsing import search_keenable
+
+    def _boom(*args, **kwargs):
+        raise web_browsing.RequestException("down")
+
+    monkeypatch.setattr(web_browsing.requests, "post", _boom)
+    assert search_keenable("x").startswith("Error fetching Keenable search")
