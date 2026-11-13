@@ -135,7 +135,7 @@ def search_youcom(query: str, max_results: int = 5) -> str:
         # out-of-range values don't trigger an HTTP 400. The conversion sits
         # inside the try so a non-numeric max_results degrades to a returned
         # error message instead of an unhandled exception.
-        count = max(1, min(int(max_results), 50))
+        count = max(1, min(int(max_results), 100))
         response = requests.post(
             "https://ydc-index.io/v1/search",
             headers={"X-API-Key": api_key, "Content-Type": "application/json"},
